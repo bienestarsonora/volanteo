@@ -46,8 +46,10 @@
     });
   }
 
-  async function ensureLeaflet(){
+  async function ensureLeaflet(options={}){
+    const force=Boolean(options&&options.force);
     if(window.L)return {ok:true,source:'already-loaded'};
+    if(force)promise=null;
     if(promise)return promise;
     promise=(async()=>{
       injectCss();
@@ -65,5 +67,6 @@
     return result;
   }
 
-  window.MapRuntime={ensureLeaflet,lastResult:null};
+  function reset(){promise=null;window.MapRuntime.lastResult=null}
+  window.MapRuntime={ensureLeaflet,reset,lastResult:null};
 })();

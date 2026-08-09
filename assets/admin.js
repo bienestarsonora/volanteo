@@ -455,7 +455,7 @@ function overpassEndpoints(){
  const eps=[...configured];
  return [...new Set(eps.map(x=>String(x||'').replace(/\/$/,'')))];
 }
-function analysisCacheKey(pts){return 'volanteo_roads_v31_'+pts.map(([a,b])=>`${Number(a).toFixed(4)},${Number(b).toFixed(4)}`).join('|')}
+function analysisCacheKey(pts){return 'volanteo_roads_v32_'+pts.map(([a,b])=>`${Number(a).toFixed(4)},${Number(b).toFixed(4)}`).join('|')}
 function readAnalysisCache(pts){try{const raw=sessionStorage.getItem(analysisCacheKey(pts));if(!raw)return null;const parsed=JSON.parse(raw);if(Date.now()-(parsed.savedAt||0)>6*60*60*1000)return null;return parsed.data||null}catch(e){return null}}
 function writeAnalysisCache(pts,data){try{sessionStorage.setItem(analysisCacheKey(pts),JSON.stringify({savedAt:Date.now(),data}))}catch(e){}}
 async function fetchOverpassRoads(query,endpoint,timeoutMs){
@@ -679,38 +679,80 @@ window.addEventListener('storage',e=>{if(cloudMode)return;if(e.key&&e.key!==STOR
 if(liveChannel)liveChannel.onmessage=()=>{if(!cloudMode)refreshRealtimeFromSharedState()};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshRealtimeFromSharedState()});
 
-async function initAdminMapRuntime(){
+async function initAdminMapRuntime(force=false){
  const target=$('#adminMap');
- if(target){const fallback=target.querySelector('.map-fallback');if(fallback)fallback.textContent='Preparando mapa…'}
- const result=window.MapRuntime?.ensureLeaflet ? await window.MapRuntime.ensureLeaflet() : {ok:Boolean(window.L)};
- if(!result.ok){if(target)target.innerHTML='<div class="map-fallback map-error"><strong>No pudimos cargar el motor del mapa.</strong><span>La planeación y los formularios siguen disponibles. Revisa tu conexión y recarga.</span></div>';return}
- initMap();
+ if(target)target.innerHTML='<div class="map-fallback">Preparando mapa…</div>';
+ const result=window.MapRuntime?.ensureLeaflet ? await window.MapRuntime.ensureLeaflet({force}) : {ok:Boolean(window.L)};
+ if(!result.ok){
+  if(target){
+   target.innerHTML='<div class="map-fallback map-error"><strong>No pudimos cargar el motor del mapa.</strong><span>Tu información está segura. Puedes reintentar la carga sin recargar todo el panel.</span><button class="btn btn-soft" id="retryMapBtn" type="button">Reintentar mapa</button></div>';
+   $('#retryMapBtn')?.addEventListener('click',()=>initAdminMapRuntime(true));
+  }
+  console.error('Leaflet no disponible',result);
+  return;
+ }
+ try{initMap();setTimeout(()=>map?.invalidateSize?.(),80)}catch(err){
+  console.error('Error inicializando mapa administrativo',err);
+  if(target){target.innerHTML='<div class="map-fallback map-error"><strong>El motor del mapa cargó, pero no pudo inicializarse.</strong><span>Reintenta; las rutas y formularios no se perderán.</span><button class="btn btn-soft" id="retryMapBtn" type="button">Reintentar mapa</button></div>';$('#retryMapBtn')?.addEventListener('click',()=>initAdminMapRuntime(true))}
+ }
 }
-function showAdminLogin(show=true){const el=$('#cloudLogin');if(el)el.hidden=!show}
+function setAuthGate({checking=false,showForm=false,message='',retry=false}={}){
+ const gate=$('#cloudLogin'),app=$('#adminApp'),checkingEl=$('#authChecking'),form=$('#adminLoginForm'),notice=$('#adminLoginNotice'),retryBtn=$('#adminRetryBtn');
+ if(gate)gate.hidden=false;
+ if(app)app.hidden=true;
+ if(checkingEl)checkingEl.hidden=!checking;
+ if(form)form.hidden=!showForm;
+ if(notice){notice.hidden=!message;notice.textContent=message||''}
+ if(retryBtn)retryBtn.hidden=!retry;
+}
+function revealAdminApp(){
+ const gate=$('#cloudLogin'),app=$('#adminApp');
+ if(gate)gate.hidden=true;
+ if(app)app.hidden=false;
+}
 async function finishAdminBoot(){
- bind();renderJourneys();setDrawingUI(false);updateGoal();await initAdminMapRuntime();
+ revealAdminApp();
+ bind();renderJourneys();setDrawingUI(false);updateGoal();
+ // Espera un frame después de revelar el panel para que Leaflet mida correctamente el contenedor.
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ await initAdminMapRuntime();
 }
 async function bootAdmin(){
+ setAuthGate({checking:true});
  if(!cloudMode){adminReady=true;setCloudStatus('Demo local',true);await finishAdminBoot();return}
  setCloudStatus('Conectando…',true);
  try{
-  await window.VolanteoCloud.init();
+  const client=await window.VolanteoCloud.init();
+  if(!client)throw new Error('Supabase no pudo inicializarse.');
   const session=await window.VolanteoCloud.getSession();
-  if(!session){showAdminLogin(true);return}
-  if(!(await window.VolanteoCloud.isAdmin())){await window.VolanteoCloud.adminSignOut();showAdminLogin(true);const n=$('#adminLoginNotice');if(n){n.hidden=false;n.textContent='La cuenta existe, pero no tiene rol de administrador.'}return}
-  showAdminLogin(false);adminReady=true;$('#logoutBtn').hidden=false;$('#adminIdentity').textContent=session.user.email||'Administración';
+  if(!session){setCloudStatus('Acceso requerido',true);setAuthGate({showForm:true});return}
+  const allowed=await window.VolanteoCloud.isAdmin();
+  if(!allowed){await window.VolanteoCloud.adminSignOut();setCloudStatus('Acceso denegado',false);setAuthGate({showForm:true,message:'La cuenta existe, pero no tiene rol de administrador.'});return}
+  adminReady=true;$('#logoutBtn').hidden=false;$('#adminIdentity').textContent=session.user.email||'Administración';
   const remote=await window.VolanteoCloud.adminLoadState();
   if(remote)state=migrateState(remote);else{state=migrateState(defaultState());await window.VolanteoCloud.adminSaveState(state)}
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));setCloudStatus('Supabase · En línea',true);
   await finishAdminBoot();
   cloudSubscription=await window.VolanteoCloud.subscribeAdmin(()=>cloudRefresh());
- }catch(err){console.error(err);setCloudStatus('Error de conexión',false);showAdminLogin(true);const n=$('#adminLoginNotice');if(n){n.hidden=false;n.textContent='No se pudo conectar con Supabase. Revisa config.js y vuelve a intentarlo.'}}
+ }catch(err){
+  console.error('Fallo de arranque administrativo',err);setCloudStatus('Error de conexión',false);
+  setAuthGate({showForm:true,message:`No se pudo validar el acceso: ${err?.message||'error de conexión'}`,retry:true});
+ }
 }
-$('#adminLoginBtn')?.addEventListener('click',async()=>{
- const email=$('#adminEmail').value.trim(),password=$('#adminPassword').value,n=$('#adminLoginNotice');
- if(n)n.hidden=true;
- try{await window.VolanteoCloud.adminSignIn(email,password);location.reload()}catch(err){if(n){n.hidden=false;n.textContent=err.message||'No fue posible iniciar sesión.'}}
-});
-$('#adminPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('#adminLoginBtn')?.click()});
+async function submitAdminLogin(){
+ const email=$('#adminEmail')?.value.trim(),password=$('#adminPassword')?.value||'',n=$('#adminLoginNotice'),btn=$('#adminLoginBtn');
+ if(!email||!password){if(n){n.hidden=false;n.textContent='Captura correo y contraseña.'}return}
+ if(n)n.hidden=true;if(btn){btn.disabled=true;btn.textContent='Verificando…'}
+ try{
+  await window.VolanteoCloud.adminSignIn(email,password);
+  const allowed=await window.VolanteoCloud.isAdmin();
+  if(!allowed){await window.VolanteoCloud.adminSignOut();throw new Error('Esta cuenta no tiene permisos de administrador.')}
+  location.reload();
+ }catch(err){if(n){n.hidden=false;n.textContent=err.message||'No fue posible iniciar sesión.'}}
+ finally{if(btn){btn.disabled=false;btn.textContent='Ingresar al panel'}}
+}
+$('#adminLoginBtn')?.addEventListener('click',submitAdminLogin);
+$('#adminPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')submitAdminLogin()});
+$('#adminRetryBtn')?.addEventListener('click',()=>location.reload());
 $('#logoutBtn')?.addEventListener('click',async()=>{await window.VolanteoCloud.adminSignOut();location.reload()});
 bootAdmin();

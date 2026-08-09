@@ -227,3 +227,12 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
 .brigadista-pin{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:11px;color:var(--muted)}
 .brigadista-pin strong{color:var(--vino);letter-spacing:.08em}
 #pinField{margin-top:10px}
+
+/* v32 · acceso administrativo fail-closed */
+[hidden]{display:none!important}
+.admin-shell[hidden]{display:none!important}
+.auth-checking{display:flex;align-items:center;gap:12px;margin:18px 0 8px;padding:14px 16px;border:1px solid var(--borde);border-radius:16px;background:#fbf7f9;color:var(--muted)}
+.auth-checking p{margin:0;font-size:13px}
+.auth-spinner{width:18px;height:18px;border-radius:50%;border:2px solid #ead7df;border-top-color:var(--brand);animation:auth-spin .75s linear infinite;flex:0 0 auto}
+@keyframes auth-spin{to{transform:rotate(360deg)}}
+.cloud-login-card #adminRetryBtn{margin-top:10px}

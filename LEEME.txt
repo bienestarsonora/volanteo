@@ -1,0 +1,11 @@
+PATCH v32 — Volanteo Bienestar Sonora
+
+Reemplaza estos archivos en tu repositorio GitHub conservando las mismas rutas:
+- admin/index.html
+- assets/admin.js
+- assets/cloud.js
+- assets/map-loader.js
+- assets/styles.css
+
+No necesitas volver a ejecutar el SQL de Supabase.
+Después de subirlos, espera a que GitHub Pages termine el despliegue y haz Ctrl+F5 en /volanteo/admin/.

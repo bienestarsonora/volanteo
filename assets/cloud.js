@@ -6,22 +6,35 @@
   let client = null;
   let initPromise = null;
 
-  function loadScript(src){
+  function loadScript(src,timeoutMs=6000){
     return new Promise((resolve,reject)=>{
-      if(window.supabase?.createClient) return resolve();
+      if(window.supabase?.createClient) return resolve(src);
+      let done=false;
       const s=document.createElement('script');
-      s.src=src;s.async=true;s.onload=resolve;s.onerror=()=>reject(new Error('No se pudo cargar Supabase JS'));
+      const finish=(ok,err)=>{if(done)return;done=true;clearTimeout(timer);if(!ok)s.remove();ok?resolve(src):reject(err||new Error('No se pudo cargar Supabase JS'))};
+      s.src=src;s.async=true;s.crossOrigin='anonymous';s.onload=()=>finish(Boolean(window.supabase?.createClient),new Error('Supabase JS cargó sin exponer createClient'));s.onerror=()=>finish(false,new Error('No se pudo cargar '+src));
+      const timer=setTimeout(()=>finish(false,new Error('Tiempo de espera agotado al cargar '+src)),timeoutMs);
       document.head.appendChild(s);
     });
+  }
+  async function ensureSupabaseLibrary(){
+    if(window.supabase?.createClient)return true;
+    const sources=[
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js',
+      'https://unpkg.com/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js'
+    ];
+    let lastError=null;
+    for(const src of sources){try{await loadScript(src);if(window.supabase?.createClient)return true}catch(err){lastError=err}}
+    throw lastError||new Error('No se pudo cargar Supabase JS');
   }
   async function init(){
     if(!enabled) return null;
     if(client) return client;
     if(!initPromise) initPromise=(async()=>{
-      await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js');
+      await ensureSupabaseLibrary();
       client=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
       return client;
-    })();
+    })().catch(err=>{initPromise=null;throw err});
     return initPromise;
   }
   async function getSession(){const c=await init();if(!c)return null;const {data,error}=await c.auth.getSession();if(error)throw error;return data.session}
