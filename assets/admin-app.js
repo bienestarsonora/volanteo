@@ -69,7 +69,22 @@ function migrateState(s){
  s.version=Math.max(Number(s.version||0),30);
  return s;
 }
-function loadState(){try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){const migrated=migrateState(JSON.parse(raw));localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated));return migrated}}catch(e){} const s=defaultState();saveState(s);return s}
+function loadState(){
+ try{
+  const raw=localStorage.getItem(STORAGE_KEY);
+  if(raw){
+   const migrated=migrateState(JSON.parse(raw));
+   localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated));
+   return migrated;
+  }
+ }catch(e){console.warn('No se pudo restaurar el estado local',e)}
+ // IMPORTANTE: durante la primera carga `state` todavía no ha sido inicializado.
+ // No llamar saveState() aquí, porque saveState compara contra `state` y produciría
+ // un ReferenceError (TDZ), deteniendo todo el JS antes de enlazar el formulario de login.
+ const initial=defaultState();
+ try{localStorage.setItem(STORAGE_KEY,JSON.stringify(initial))}catch(e){}
+ return initial;
+}
 function queueCloudSave(){
  if(!cloudMode||!adminReady||cloudApplying)return;
  clearTimeout(cloudSaveTimer);
@@ -765,6 +780,8 @@ async function submitAdminLogin(event){
  }
 }
 $('#adminLoginForm')?.addEventListener('submit',submitAdminLogin);
+$('#adminLoginBtn')?.addEventListener('click',submitAdminLogin);
+$('#adminPassword')?.addEventListener('keydown',e=>{if(e.key==='Enter')submitAdminLogin(e)});
 $('#adminRetryBtn')?.addEventListener('click',()=>bootAdmin());
 $('#logoutBtn')?.addEventListener('click',async()=>{await window.VolanteoCloud.adminSignOut();location.replace(location.pathname+'?logout=1')});
 bootAdmin();
