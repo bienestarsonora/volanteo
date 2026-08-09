@@ -6,6 +6,7 @@ const LIVE_CHANNEL_NAME='bienestar_volanteo_live_v30';
 const liveChannel=('BroadcastChannel' in window)?new BroadcastChannel(LIVE_CHANNEL_NAME):null;
 const cloudMode=Boolean(window.VolanteoCloud?.enabled);
 let adminReady=false,cloudSaveTimer=null,cloudApplying=false,cloudSubscription=null;
+let cloudSaveInFlight=null,cloudPendingWrite=null,cloudSaveSeq=0,cloudLastMutationAt=0;
 let map=null,draftLayer=null,draftVertexLayer=null,roadLayer=null,drawing=false,draft=[],mode='volanteo',coverageMode='zone',goalType='calles',mapFilter='exercise',editingRouteId=null,roadAnalysis=null,manualGoalOverride=null,drawSessionId=0,analysisRunId=0,lastAcceptedAnalysis=null,lastAcceptedPolygonKey='';
 
 function isoDate(d){return d.toISOString().slice(0,10)}
@@ -85,21 +86,71 @@ function loadState(){
  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(initial))}catch(e){}
  return initial;
 }
-function queueCloudSave(){
- if(!cloudMode||!adminReady||cloudApplying)return;
- clearTimeout(cloudSaveTimer);
- cloudSaveTimer=setTimeout(async()=>{
-  try{await window.VolanteoCloud.adminSaveState(state);setCloudStatus('En línea',true)}
-  catch(err){console.error('No se pudo guardar en Supabase',err);setCloudStatus('Error al guardar',false)}
- },350);
+function cloneState(value){
+ try{return structuredClone(value)}catch(_e){return JSON.parse(JSON.stringify(value))}
 }
-function saveState(s=state){
+function cloudWritePending(){
+ return Boolean(cloudSaveTimer||cloudSaveInFlight||cloudPendingWrite||(Date.now()-cloudLastMutationAt<900));
+}
+async function flushCloudSave(){
+ if(!cloudMode||!adminReady||!cloudPendingWrite)return false;
+ // Si una lectura o escritura remota ya está en curso, espera a que termine. El
+ // snapshot pendiente permanece intacto y tiene prioridad sobre cualquier poll.
+ if(cloudApplying){
+  await new Promise(resolve=>setTimeout(resolve,90));
+  return flushCloudSave();
+ }
+ if(cloudSaveInFlight){
+  try{await cloudSaveInFlight}catch(_e){}
+  return cloudPendingWrite?flushCloudSave():true;
+ }
+ const entry=cloudPendingWrite;
+ cloudPendingWrite=null;
+ if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
+ cloudSaveInFlight=(async()=>{
+  let succeeded=false;
+  try{
+   await window.VolanteoCloud.adminSaveState(entry.snapshot);
+   succeeded=true;
+   setCloudStatus('En línea',true);
+   return true;
+  }catch(err){
+   console.error('No se pudo guardar en Supabase',err);
+   setCloudStatus('Error al guardar',false);
+   // Si no hubo una edición posterior, conserva este snapshot, pero no reintenta
+   // en bucle: una nueva acción del usuario o un guardado posterior lo enviará.
+   if(!cloudPendingWrite||cloudPendingWrite.seq<entry.seq)cloudPendingWrite=entry;
+   throw err;
+  }finally{
+   cloudSaveInFlight=null;
+   // Solo encadena automáticamente si apareció una edición MÁS NUEVA mientras
+   // esta escritura estaba en curso. Un fallo no provoca reintentos infinitos.
+   if(cloudPendingWrite&&!cloudApplying&&cloudPendingWrite.seq>entry.seq){
+    cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave().catch(()=>{})},150);
+   }else if(succeeded&&cloudPendingWrite?.seq===entry.seq){
+    cloudPendingWrite=null;
+   }
+  }
+ })();
+ return cloudSaveInFlight;
+}
+function queueCloudSave(snapshot=state,{immediate=false}={}){
+ if(!cloudMode||!adminReady||cloudApplying)return Promise.resolve(false);
+ const entry={seq:++cloudSaveSeq,snapshot:cloneState(snapshot)};
+ cloudPendingWrite=entry;
+ cloudLastMutationAt=Date.now();
+ if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
+ if(immediate)return flushCloudSave();
+ cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave().catch(()=>{})},350);
+ return Promise.resolve(true);
+}
+function saveState(s=state,options={}){
  if(s===state)syncRouteSnapshots();
  const payload=JSON.stringify(s);
  localStorage.setItem(STORAGE_KEY,payload);
  try{window.dispatchEvent(new StorageEvent('storage',{key:STORAGE_KEY,newValue:payload}))}catch(e){}
  try{liveChannel?.postMessage({type:'state',at:Date.now()})}catch(e){}
- queueCloudSave();
+ return queueCloudSave(s,options);
 }
 let state=loadState();
 
@@ -641,7 +692,28 @@ function updateGoal(){const segments=Math.max(0,draft.length-1),el=$('#coverageA
 
 async function saveRoute(){const e=getExercise();if(!e)return;if(mode==='volanteo'&&coverageMode==='zone'&&draft.length<3)return alert('Delimita al menos tres puntos para formar una zona de cobertura.');if((mode==='perifoneo'||coverageMode==='line')&&draft.length<2)return alert('Dibuja al menos un tramo.');let manual=manualGoalValue();if(mode==='volanteo'&&coverageMode==='zone'&&!roadAnalysis&&!manual){const a=await analyzeZone(draft);manual=manualGoalValue();if(!a&&!manual)return alert('El análisis automático no respondió. Puedes reintentar o capturar una meta provisional sin volver a dibujar la zona.')}const memberIds=selectedMemberIds();if(!memberIds.length)return alert('Selecciona al menos un brigadista.');const members=memberIds.map(id=>personById(id)?.name).filter(Boolean);const goal=mode==='perifoneo'?Number(draftKm().toFixed(1)):coverageMode==='zone'?(roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):manual):Math.max(0,draft.length-1);const r={id:uid('route'),name:$('#routeName').value.trim()||`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`,type:mode,coverageMode:mode==='perifoneo'?'line':coverageMode,memberIds,members,color:nextRouteColor(),goalType:mode==='perifoneo'?'km':goalType,goal,status:'pending',progress:0,pts:draft.map(p=>[Number(p[0]),Number(p[1])]),streetSegments:roadAnalysis?(goalType==='calles'?(roadAnalysis.selectedChunks||roadAnalysis.chunks||[]):(roadAnalysis.allChunks||roadAnalysis.chunks||[])):[],streetNames:roadAnalysis?.streetNames||[],streetCount:roadAnalysis?.streetCount||null,blockCount:roadAnalysis?.blockCount||null,analysisVersion:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?5:'manual'):null,analysisSource:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?'osm':'manual'):null,completedBlocks:0,blockReports:[],trackPoints:[],createdAt:Date.now()};e.routes.push(r);drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);saveState();$('#drawNotice').className='notice success';$('#drawNotice').textContent=`${r.name} guardada con meta de ${r.type==='perifoneo'?Number(r.goal).toFixed(1)+' km':r.goal+' '+r.goalType}${r.analysisSource==='manual'?' (provisional)':''}. Ya aparece en Seguimiento.`;$('#routeName').value=`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`;renderJourneys();updateGoal()}
 async function refreshLegacyZoneGoals(){const e=getExercise();if(!e)return;const list=(e.routes||[]).filter(r=>r.type==='volanteo'&&r.coverageMode==='zone'&&Number(r.analysisVersion||0)<5&&r.pts?.length>=3);for(const r of list.slice(0,4)){const prevMode=mode,prevCoverage=coverageMode,prevGoal=goalType,prevDraft=draft,prevAnalysis=roadAnalysis;mode='volanteo';coverageMode='zone';goalType=r.goalType||'calles';draft=[...r.pts];const a=await analyzeZone(draft,{silent:true});if(a){r.streetSegments=a.chunks;r.streetNames=a.streetNames;r.streetCount=a.streetCount;r.blockCount=a.blockCount;r.goal=r.goalType==='cuadras'?a.blockCount:a.streetCount;r.analysisVersion=5;r.analysisSource='osm-v29';if(r.status==='live'&&r.goal)r.progress=Math.min(100,Math.round((r.completedUnits||0)/r.goal*100))}mode=prevMode;coverageMode=prevCoverage;goalType=prevGoal;draft=prevDraft;roadAnalysis=prevAnalysis}if(list.length){saveState();renderJourneys();clearRoadAnalysis();updateGoal()}}
-function deleteRoute(id){if(!confirm('¿Borrar esta ruta? Esta acción no afecta las demás rutas del ejercicio.'))return;const e=getExercise();e.routes=e.routes.filter(r=>r.id!==id);saveState();renderJourneys()}
+async function deleteRoute(id){
+ if(!confirm('¿Borrar esta ruta? Se eliminará del operativo y del seguimiento.'))return;
+ const e=getExercise();if(!e)return;
+ const route=e.routes.find(r=>String(r.id)===String(id));if(!route)return;
+ e.routes=e.routes.filter(r=>String(r.id)!==String(id));
+ renderJourneys();
+ setCloudStatus(cloudMode?'Guardando eliminación…':'Actualizado',true);
+ try{
+  // La eliminación es una mutación crítica: persistir de inmediato antes de permitir
+  // que el refresco remoto vuelva a consultar app_state.
+  await saveState(state,{immediate:true});
+  if(cloudMode&&window.VolanteoCloud?.adminDeleteRouteData){
+   await window.VolanteoCloud.adminDeleteRouteData(id);
+  }
+  setCloudStatus('En línea',true);
+ }catch(err){
+  console.error('No se pudo completar la eliminación de la ruta',err);
+  // No resucitar silenciosamente: conserva la vista local y permite reintentar guardado.
+  setCloudStatus('Eliminación pendiente de sincronizar',false);
+  alert('La ruta se quitó de la pantalla, pero Supabase no confirmó la eliminación. Revisa tu conexión y vuelve a intentar antes de recargar.');
+ }
+}
 function duplicateRoute(id){const e=getExercise(),r=e.routes.find(x=>x.id===id);if(!r)return;const copy=JSON.parse(JSON.stringify(r));copy.id=uid('route');copy.name=r.name+' copia';copy.color=nextRouteColor();copy.status='pending';copy.progress=0;copy.completedUnits=0;copy.completedBlocks=0;copy.blockReports=[];copy.trackPoints=[];copy.lastPosition=null;copy.lastPositionAt=null;copy.lastProgressAt=null;delete copy.startedAt;delete copy.finishedAt;e.routes.push(copy);saveState();renderJourneys()}
 function openEditRoute(id){const e=getExercise(),r=e.routes.find(x=>x.id===id);if(!r)return;editingRouteId=id;$('#editRouteName').value=r.name;renderMemberPicker('#editMemberPicker',r.memberIds||[]);$('#editRouteModal').hidden=false}
 function saveEditRoute(){const e=getExercise(),r=e.routes.find(x=>x.id===editingRouteId);if(!r)return;r.name=$('#editRouteName').value.trim()||r.name;r.memberIds=selectedMemberIds('#editMemberPicker');if(!r.memberIds.length)return alert('Selecciona al menos un brigadista.');r.members=r.memberIds.map(id=>personById(id)?.name).filter(Boolean);saveState();$('#editRouteModal').hidden=true;renderJourneys()}
@@ -675,10 +747,16 @@ function setCloudStatus(text,ok=true){
  const el=$('#cloudStatus');if(!el)return;el.innerHTML=`<i></i> ${text}`;el.classList.toggle('is-error',!ok);
 }
 async function cloudRefresh(){
- if(!cloudMode||!adminReady)return;
+ if(!cloudMode||!adminReady||cloudApplying||cloudWritePending())return;
  try{
-  cloudApplying=true;const remote=await window.VolanteoCloud.adminLoadState();
-  if(remote){state=migrateState(remote);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderJourneys()}
+  cloudApplying=true;
+  const remote=await window.VolanteoCloud.adminLoadState();
+  // Nunca aplicar una lectura remota vieja mientras existe una mutación local pendiente.
+  if(remote&&!cloudWritePending()){
+   state=migrateState(remote);
+   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+   renderJourneys();
+  }
   setCloudStatus('En línea',true);
  }catch(err){console.error('Error de sincronización Supabase',err);setCloudStatus('Sin conexión',false)}finally{cloudApplying=false}
 }

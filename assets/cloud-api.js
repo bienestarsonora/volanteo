@@ -111,6 +111,15 @@
     await request('/rest/v1/app_state?on_conflict=id',{method:'POST',admin:true,body:{id:'main',state,updated_at:new Date().toISOString()},headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}});
     await rpc('admin_sync_brigadistas',{p_people:state?.brigadistas||[]},true);return true;
   }
+  async function adminDeleteRouteData(routeId){
+    const rid=encodeURIComponent(String(routeId||''));
+    if(!rid)return false;
+    // Limpia solamente datos operativos de la ruta borrada. app_state se persiste aparte.
+    await request(`/rest/v1/route_reports?route_id=eq.${rid}`,{method:'DELETE',admin:true,headers:{'Prefer':'return=minimal'}});
+    await request(`/rest/v1/route_locations?route_id=eq.${rid}`,{method:'DELETE',admin:true,headers:{'Prefer':'return=minimal'}});
+    await request(`/rest/v1/route_runtime?route_id=eq.${rid}`,{method:'DELETE',admin:true,headers:{'Prefer':'return=minimal'}});
+    return true;
+  }
   async function subscribeAdmin(onChange){
     // Sin dependencias externas: refresco casi inmediato y estable en GitHub Pages.
     let busy=false;
@@ -127,5 +136,5 @@
   async function fieldLocation(brigadistaId,pin,routeId,position){return rpc('field_update_location',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position.lat,p_lng:position.lng,p_accuracy_m:position.accuracy??null},false)}
   async function fieldFinish(brigadistaId,pin,routeId){return rpc('field_finish_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
 
-  window.VolanteoCloud={enabled,init,getSession,adminSignIn,adminSignOut,isAdmin,adminLoadState,adminSaveState,subscribeAdmin,fieldListBrigadistas,fieldGetAssignment,fieldStart,fieldReportBlock,fieldReportProgress,fieldLocation,fieldFinish};
+  window.VolanteoCloud={enabled,init,getSession,adminSignIn,adminSignOut,isAdmin,adminLoadState,adminSaveState,adminDeleteRouteData,subscribeAdmin,fieldListBrigadistas,fieldGetAssignment,fieldStart,fieldReportBlock,fieldReportProgress,fieldLocation,fieldFinish};
 })();

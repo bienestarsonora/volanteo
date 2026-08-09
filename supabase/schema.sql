@@ -215,7 +215,7 @@ begin
   if jsonb_typeof(coalesce(p_people,'[]'::jsonb)) <> 'array' then raise exception 'p_people debe ser un arreglo'; end if;
 
   -- Lo que ya no está en el catálogo queda inactivo, no se elimina: preserva referencias históricas.
-  update public.brigadista_credentials set activo=false, updated_at=now();
+  update public.brigadista_credentials set activo=false, updated_at=now() where activo=true;
 
   for p in select * from jsonb_array_elements(p_people)
   loop
