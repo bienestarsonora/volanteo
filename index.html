@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#8f0a4a">
+  <title>Mi Ruta | Bienestar Sonora</title>
+  <link rel="stylesheet" href="./assets/styles.css?v=31">
+</head>
+<body class="field-body">
+<div class="field-shell">
+  <header class="field-header">
+    <img src="./assets/brand/bienestar-horizontal.png" alt="Secretaría de Bienestar" class="field-logo">
+    <div class="field-header-actions"><span class="system-chip"><i></i> Operativo territorial</span><a href="./admin/" class="header-link" target="_self">Administración</a></div>
+  </header>
+
+  <main class="field-main">
+    <section class="field-login" id="loginView">
+      <article class="field-welcome">
+        <div class="welcome-orb"></div>
+        <div class="eyebrow light-eyebrow">Ruta del día</div>
+        <h1>Tu asignación territorial, clara desde el primer momento.</h1>
+        <p>Selecciona tu nombre y la plataforma encontrará automáticamente la Jornada del Bienestar, el ejercicio activo, tu equipo y la ruta que te corresponde.</p>
+        <div class="field-access-card">
+          <div class="field"><label for="brigadistaSelect">Selecciona tu nombre</label><select id="brigadistaSelect"></select></div><div class="field" id="pinField"><label for="brigadistaPin">PIN de acceso</label><input id="brigadistaPin" type="password" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••"></div>
+          <button class="btn btn-light btn-block" id="enterBtn">Ver mi ruta asignada <span>→</span></button>
+          <small id="assignmentHint">Selecciona tu nombre e ingresa tu PIN. La app verificará tu asignación vigente.</small>
+        </div>
+      </article>
+      <article class="field-preview-card">
+        <div class="field-preview-head"><div><div class="eyebrow">Cobertura territorial</div><h2>Operativo vigente</h2><p>Las rutas programadas se actualizan desde el panel de coordinación.</p></div><span class="live-pill"><i></i> Activo</span></div>
+        <div id="previewMap" class="field-map premium-field-map"><div class="map-fallback">Mapa de cobertura territorial</div></div>
+      </article>
+    </section>
+
+    <section id="assignmentView" hidden>
+      <div class="assignment-topline">
+        <div><div class="eyebrow">Jornada del Bienestar</div><h1 id="fieldVenue">Sede</h1><p id="fieldJourneyDate">Fecha y hora de la jornada</p></div>
+        <div class="operation-chip"><span>Operativo asignado</span><strong id="fieldExercise">Turno</strong><small id="fieldExerciseDate">Fecha del operativo</small></div>
+      </div>
+
+      <section class="assignment-layout">
+        <article class="assignment-command">
+          <div class="assignment-label">Tu ruta de hoy</div>
+          <div class="route-banner premium-route-banner" id="routeBanner"><span class="route-color-dot"></span><div><strong id="fieldRoute">Ruta</strong><small id="fieldMode">Volanteo territorial</small></div></div>
+          <div class="assignment-meta"><div><small>Equipo</small><strong id="fieldTeam">—</strong></div><div><small>Meta</small><strong id="fieldGoal">—</strong></div><div><small>Estado</small><strong id="fieldStatus">Pendiente</strong></div></div>
+          <div class="team-block"><small>Tu equipo en este ejercicio</small><div class="member-chips" id="fieldMembers"></div></div>
+          <div class="field-stats"><div class="field-stat"><span id="doneLabel">Cuadras reportadas</span><strong id="doneCount">0</strong></div><div class="field-stat"><span>Distancia GPS</span><strong><b id="distanceCount">0.0</b> km</strong></div><div class="field-stat"><span>Progreso</span><strong id="percentCount">0%</strong></div></div>
+          <div class="progress premium-progress"><span id="fieldProgress" style="width:0%"></span></div>
+          <div class="block-report-panel" id="blockReportPanel" hidden><div class="block-report-head"><div><strong>Reporte de cuadras</strong><small>Se actualiza al momento en Coordinación</small></div><span class="live-sync-chip"><i></i> En vivo</span></div><div id="blockReportFeed" class="block-report-feed"></div></div>
+          <div class="mobile-actions"><button class="btn btn-primary" id="startBtn">Iniciar recorrido</button><button class="btn btn-soft" id="advanceBtn" disabled>Reportar cuadra recorrida</button><button class="btn btn-danger-soft" id="finishBtn" disabled>Finalizar</button></div>
+          <div class="notice" id="fieldNotice">Al iniciar, permite el acceso a ubicación y mantén esta pantalla abierta durante el recorrido.</div>
+          <button class="text-btn" id="backBtn">← Cambiar de brigadista</button>
+        </article>
+        <article class="assignment-map-card"><div class="assignment-map-head"><div><div class="eyebrow">Recorrido asignado</div><h3>Sigue la ruta marcada en el mapa</h3></div><span class="live-pill"><i></i> GPS</span></div><div id="fieldMap" class="field-map assignment-map"><div class="map-fallback">Tu ruta aparecerá aquí.</div></div></article>
+      </section>
+    </section>
+  </main>
+  <footer class="field-footer">Dirección de Estrategias de Participación Social · Secretaría de Bienestar · Gobierno de Sonora</footer>
+</div>
+<script src="./assets/map-loader.js?v=31"></script>
+<script src="./assets/config.js?v=31"></script>
+<script src="./assets/cloud.js?v=31"></script>
+<script src="./assets/app.js?v=31"></script>
+</body>
+</html>

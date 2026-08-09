@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#8f0a4a">
+  <title>Centro de Operación Territorial | Bienestar Sonora</title>
+  <link rel="stylesheet" href="../assets/styles.css?v=31">
+</head>
+<body class="admin-body strategist-ui">
+<div class="admin-shell">
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="sidebar-brand sidebar-brand-clean">
+      <img src="../assets/brand/bienestar-horizontal-white.png" alt="Secretaría de Bienestar">
+    </div>
+    <nav class="sidebar-nav" aria-label="Navegación principal">
+      <a class="nav-item active" href="#panel" data-scroll="panel"><span class="nav-icon">⌂</span><span>Operación</span></a>
+      <a class="nav-item" href="#planificar" data-scroll="planificar"><span class="nav-icon">↝</span><span>Planear ruta</span></a>
+      <a class="nav-item" href="#seguimiento" data-scroll="seguimiento"><span class="nav-icon">▥</span><span>Seguimiento</span></a>
+      <a class="nav-item" href="#brigadistas" data-scroll="brigadistas"><span class="nav-icon">◎</span><span>Equipo</span></a>
+      <a class="nav-item" href="#historial" data-scroll="historial"><span class="nav-icon">↶</span><span>Historial</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sidebar-orbit"><span></span></div>
+      <div><strong>Operación Territorial</strong><small>Bienestar Sonora · v31</small></div>
+    </div>
+  </aside>
+
+  <div class="admin-main">
+    <header class="app-header app-header-clean">
+      <div class="header-left">
+        <button class="hamburger" id="sidebarToggle" aria-label="Abrir navegación">☰</button>
+        <div class="product-name"><strong>Volanteo</strong><span>Centro de Operación Territorial</span></div>
+      </div>
+      <div class="header-actions">
+        <span class="system-chip" id="cloudStatus"><i></i> Conectando…</span>
+        <a class="header-link" href="../" target="_self">Acceso brigadas</a>
+        <div class="admin-profile"><span class="profile-dot">A</span><div><strong id="adminIdentity">Administración</strong><small>Planeación territorial</small></div></div><button class="header-link header-button" id="logoutBtn" type="button" hidden>Salir</button>
+      </div>
+    </header>
+
+    <main class="dashboard strategist-dashboard" id="panel">
+      <section class="strategist-hero">
+        <div class="strategist-hero-copy">
+          <div class="eyebrow">Jornada del Bienestar</div>
+          <h1><span id="heroVenue">Los Pinos</span></h1>
+          <p id="heroDate">Martes · 17:00 h</p>
+          <div class="hero-inline-context">
+            <span><strong id="mExercises">0</strong> ejercicios de difusión</span>
+            <span id="currentDateLabel">Jornada seleccionada</span>
+          </div>
+        </div>
+        <div class="journey-control-card">
+          <div class="field"><label for="journeySelect">Jornada que estás planeando</label><select id="journeySelect"></select></div>
+          <div class="journey-actions-clean">
+            <button class="btn btn-primary" id="newJourneyBtn">+ Nueva jornada</button>
+            <button class="btn btn-soft" id="archiveJourneyBtn">Archivar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="strategist-kpis" aria-label="Indicadores esenciales">
+        <article class="strategist-kpi"><span class="kpi-icon">↝</span><div><small>Rutas diseñadas</small><strong id="mRoutes">0</strong></div></article>
+        <article class="strategist-kpi"><span class="kpi-icon">◎</span><div><small>Brigadistas asignados</small><strong id="mPeople">0</strong></div></article>
+        <article class="strategist-kpi accent"><span class="kpi-icon">◉</span><div><small>Cobertura acumulada</small><strong id="mCoverage">0%</strong></div></article>
+      </section>
+
+      <section class="premium-panel strategist-schedule" id="operativos">
+        <div class="section-intro-row">
+          <div><div class="eyebrow">Ciclo de difusión</div><h2>¿Qué ejercicio vas a trabajar?</h2><p>Selecciona el turno. El mapa, las rutas y los equipos cambiarán a ese ejercicio.</p></div>
+          <button class="btn btn-soft" id="addExerciseQuickBtn">+ Ejercicio adicional</button>
+        </div>
+        <div class="timeline premium-timeline compact-timeline" id="exerciseTimeline"></div>
+      </section>
+
+      <section class="strategy-workspace" id="planificar">
+        <div class="workspace-topbar">
+          <div>
+            <div class="eyebrow">Espacio de planeación</div>
+            <h2 id="exerciseTitle">Selecciona un operativo</h2>
+            <p id="exerciseSub">Aquí decides territorio, modalidad y equipo.</p>
+          </div>
+          <span class="status-badge" id="exerciseState">Programado</span>
+        </div>
+
+        <div class="workspace-grid">
+          <article class="premium-panel workspace-map-panel">
+            <div class="workspace-map-head">
+              <div>
+                <strong>Cobertura territorial</strong>
+                <small id="mapDrawHint">Configura la ruta a la derecha y pulsa “Trazar en el mapa”.</small>
+              </div>
+              <div class="segmented"><button class="seg-btn active" data-mapfilter="exercise">Este ejercicio</button><button class="seg-btn" data-mapfilter="journey">Toda la jornada</button></div>
+            </div>
+            <div class="map-wrap strategist-map-wrap">
+              <div id="adminMap" class="map strategist-map"><div class="map-fallback">Cargando mapa…</div></div>
+              <div class="draw-mode-badge" id="drawModeBadge">✦ Modo trazado activo</div>
+              <div class="map-legend strategist-legend" id="mapLegend"><strong>Rutas del ejercicio</strong><div class="legend-items">Sin rutas guardadas</div></div>
+            </div>
+          </article>
+
+          <aside class="premium-panel route-composer">
+            <div class="composer-head">
+              <div><div class="eyebrow">Nueva ruta</div><h3>Configura y traza</h3></div>
+              <span class="route-color-preview" aria-hidden="true"></span>
+            </div>
+
+            <div class="composer-section">
+              <label class="composer-label">1. Modalidad</label>
+              <div class="tabs"><button class="tab-btn active" data-mode="volanteo">Volanteo</button><button class="tab-btn" data-mode="perifoneo">Perifoneo</button></div>
+            </div>
+
+            <div class="composer-section" id="coverageModeStep">
+              <label class="composer-label">2. ¿Qué vas a delimitar?</label>
+              <div class="segmented coverage-mode-selector">
+                <button class="seg-btn active" data-coverage="zone">Zona de cobertura</button>
+                <button class="seg-btn" data-coverage="line">Ruta lineal</button>
+              </div>
+              <p class="composer-help" id="coverageModeHelp">Delimita el sector completo. La app detectará las vialidades interiores, no solo el perímetro.</p>
+            </div>
+
+            <div class="composer-section">
+              <label class="composer-label" for="routeName">3. Identifica la ruta</label>
+              <input class="composer-input" id="routeName" value="Ruta 01">
+            </div>
+
+            <div class="composer-section">
+              <label class="composer-label">4. ¿Quiénes van?</label>
+              <div class="member-picker composer-members" id="memberPicker"></div>
+            </div>
+
+            <div class="composer-section draw-section">
+              <label class="composer-label">5. Delimita en el mapa</label>
+              <button class="btn btn-primary btn-block draw-primary" id="startDrawBtn">▱ Delimitar zona</button>
+              <div class="draw-secondary-actions"><button class="btn btn-soft" id="undoBtn">Deshacer punto</button><button class="btn btn-danger-soft" id="clearBtn">Reiniciar</button></div>
+              <div class="notice draw-notice" id="drawNotice">Marca las esquinas o límites del sector. Al cerrar la zona, calcularemos las calles interiores.</div>
+            </div>
+
+            <div class="composer-section compact-goal" id="goalStep">
+              <div class="goal-header"><label class="composer-label">Meta automática</label><div class="segmented" id="goalSelector"><button class="seg-btn active" data-goal="calles">Calles</button><button class="seg-btn" data-goal="cuadras">Cuadras</button></div></div>
+              <div class="auto-goal"><div><small id="goalLabel">Calles detectadas</small><strong id="goalValue">—</strong></div><span class="goal-unit" id="goalUnit">calles</span></div>
+              <div class="coverage-analysis" id="coverageAnalysis">Traza una zona para analizar automáticamente su red vial.</div>
+              <div class="street-review" id="streetReview" hidden></div>
+              <button class="analysis-retry" id="retryAnalysisBtn" type="button" hidden>↻ Reintentar análisis de calles</button>
+              <div class="manual-goal-fallback" id="manualGoalFallback" hidden>
+                <strong>Continuar sin perder el trabajo</strong>
+                <p>Si la consulta automática no responde, puedes capturar una meta provisional y ajustarla después. La zona dibujada se conserva.</p>
+                <div class="manual-goal-row">
+                  <input id="manualGoalInput" type="number" min="1" step="1" inputmode="numeric" placeholder="Ej. 18">
+                  <button class="btn btn-soft" id="applyManualGoalBtn" type="button">Usar meta</button>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block save-route composer-save" id="saveRouteBtn">Guardar ruta</button>
+          </aside>
+        </div>
+
+        <div class="workspace-route-strip" aria-label="Resumen del ejercicio">
+          <div class="workspace-route-title"><strong>Rutas ya creadas</strong><span>Consulta rápida del ejercicio actual</span></div>
+          <div class="mini-route-list horizontal-mini-routes" id="sideRouteList"></div>
+        </div>
+      </section>
+
+      <section class="premium-panel strategist-tracking" id="seguimiento">
+        <div class="section-intro-row tracking-head-clean">
+          <div><div class="eyebrow">Seguimiento</div><h2>¿Qué está pasando en campo?</h2><p>Solo las rutas del ejercicio seleccionado: estado, equipo, meta y avance.</p></div>
+        </div>
+        <div class="tracking-list clean-tracking-list" id="trackingList"></div>
+      </section>
+
+      <section class="secondary-tools">
+        <details class="premium-panel disclosure" id="brigadistas">
+          <summary><span><span class="eyebrow">Equipo operativo</span><strong>Brigadistas</strong><small>Administra quién está disponible para nuevas rutas.</small></span><span class="summary-action">Gestionar →</span></summary>
+          <div class="disclosure-body">
+            <div class="roster-summary"><div class="roster-stat"><small>Disponibles</small><strong id="rosterActiveCount">0</strong></div><div class="roster-stat"><small>Inactivos</small><strong id="rosterInactiveCount">0</strong></div><div class="roster-preview" id="rosterPreview"></div></div>
+            <button class="btn btn-primary" id="manageBrigadistasBtn">Gestionar brigadistas</button>
+            <div id="quickRoster" hidden></div>
+          </div>
+        </details>
+
+        <details class="premium-panel disclosure">
+          <summary><span><span class="eyebrow">Lectura estratégica</span><strong>Resumen completo de la Jornada</strong><small>Abre solo cuando quieras revisar cobertura por ejercicio.</small></span><span class="summary-action">Ver resumen →</span></summary>
+          <div class="disclosure-body"><div class="route-list" id="journeyRouteList"></div></div>
+        </details>
+      </section>
+
+      <section class="premium-panel history-panel strategist-history" id="historial">
+        <div class="section-intro-row">
+          <div><div class="eyebrow">Memoria operativa</div><h2>Jornadas anteriores</h2><p>Las jornadas archivadas conservan sus ejercicios, rutas y equipos.</p></div>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+
+      <div id="todayOps" hidden></div>
+      <footer class="dashboard-footer">Dirección de Estrategias de Participación Social · Secretaría de Bienestar · Gobierno de Sonora</footer>
+    </main>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="journeyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Planeación</div><h3>Nueva Jornada del Bienestar</h3></div><button class="icon-btn" data-close="journeyModal">×</button></div><div class="form-grid"><div class="field"><label>Sede / colonia</label><input id="newVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label>Fecha de la jornada</label><input id="newDate" type="date"></div></div><div class="field"><label>Hora de la jornada</label><input id="newTime" type="time" value="17:00"></div><div class="notice">Si la jornada es martes o viernes se generará automáticamente el calendario habitual de difusión previa. Después puedes agregar ejercicios adicionales.</div><div class="modal-actions"><button class="btn btn-soft" data-close="journeyModal">Cancelar</button><button class="btn btn-primary" id="createJourneyBtn">Crear jornada</button></div></div></div>
+
+<div class="modal-backdrop" id="brigadistaModal" hidden><div class="modal modal-wide"><div class="modal-head"><div><div class="eyebrow">Equipo operativo</div><h3>Administrar brigadistas</h3></div><button class="icon-btn" data-close="brigadistaModal">×</button></div><p class="modal-copy">Agrega, edita, activa o desactiva al personal disponible. Las participaciones históricas permanecen ligadas a las jornadas anteriores.</p><div class="brigadista-add"><div class="field"><label for="newBrigadistaName">Nombre completo</label><input id="newBrigadistaName" placeholder="Ej. Andrea Martínez"></div><div class="field"><label for="newBrigadistaPin">PIN</label><input id="newBrigadistaPin" inputmode="numeric" maxlength="6" placeholder="Ej. 4821"></div><button class="btn btn-primary" id="addBrigadistaBtn">Agregar brigadista</button></div><div class="brigadista-manager-list" id="brigadistaManagerList"></div></div></div>
+
+<div class="modal-backdrop" id="editRouteModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Gestión de rutas</div><h3>Editar ruta</h3></div><button class="icon-btn" data-close="editRouteModal">×</button></div><div class="field"><label>Nombre</label><input id="editRouteName"></div><div class="field"><label>Brigadistas asignados</label><div class="member-picker" id="editMemberPicker"></div></div><div class="modal-actions"><button class="btn btn-soft" data-close="editRouteModal">Cancelar</button><button class="btn btn-primary" id="saveEditRouteBtn">Guardar cambios</button></div></div></div>
+
+<div class="cloud-login" id="cloudLogin" hidden>
+  <div class="cloud-login-card">
+    <img src="../assets/brand/bienestar-horizontal.png" alt="Secretaría de Bienestar">
+    <div class="eyebrow">Acceso administrativo</div>
+    <h2>Centro de Operación Territorial</h2>
+    <p>Inicia sesión con la cuenta administrativa registrada en Supabase.</p>
+    <div class="field"><label for="adminEmail">Correo</label><input id="adminEmail" type="email" autocomplete="username" placeholder="correo@sonora.gob.mx"></div>
+    <div class="field"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" autocomplete="current-password"></div>
+    <button class="btn btn-primary btn-block" id="adminLoginBtn" type="button">Ingresar</button>
+    <div class="notice" id="adminLoginNotice" hidden></div>
+  </div>
+</div>
+
+<script src="../assets/map-loader.js?v=31"></script>
+<script src="../assets/config.js?v=31"></script>
+<script src="../assets/cloud.js?v=31"></script>
+<script src="../assets/admin.js?v=31"></script>
+</body>
+</html>

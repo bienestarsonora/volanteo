@@ -1,0 +1,9 @@
+{
+  "name": "Centro de Operación Territorial | Bienestar Sonora",
+  "short_name": "Operación Territorial",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f8f6f7",
+  "theme_color": "#9f0b55",
+  "description": "Planeación, rutas y seguimiento territorial de las Jornadas del Bienestar."
+}
