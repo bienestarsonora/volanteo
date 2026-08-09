@@ -5,7 +5,7 @@ const $=s=>document.querySelector(s);
 const cloudMode=Boolean(window.VolanteoCloud?.enabled);
 let state=null,assignment=null,map=null,previewMap=null,trackLayer=null,routeLayer=null,reportLayer=null,watchId=null,track=[],currentPosition=null;
 let cloudPeople=[],fieldPin='',selectedPersonId='',pollTimer=null,lastLocationSentAt=0;
-const LIVE_CHANNEL_NAME='bienestar_volanteo_live_v31';
+const LIVE_CHANNEL_NAME='bienestar_volanteo_live_v32';
 const liveChannel=('BroadcastChannel' in window)?new BroadcastChannel(LIVE_CHANNEL_NAME):null;
 
 function isoDate(d){return d.toISOString().slice(0,10)}

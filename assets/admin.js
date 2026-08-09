@@ -718,31 +718,33 @@ async function finishAdminBoot(){
  await initAdminMapRuntime();
 }
 async function bootAdmin(){
- setAuthGate({checking:true});
+ // El formulario siempre está disponible desde el primer instante. Nunca bloqueamos la pantalla en un spinner.
+ setAuthGate({showForm:true});
  if(!cloudMode){adminReady=true;setCloudStatus('Demo local',true);await finishAdminBoot();return}
- setCloudStatus('Conectando…',true);
+ setCloudStatus('Acceso requerido',true);
  try{
   const client=await window.VolanteoCloud.init();
-  if(!client)throw new Error('Supabase no pudo inicializarse.');
+  if(!client)throw new Error('Supabase no está configurado.');
   const session=await window.VolanteoCloud.getSession();
-  if(!session){setCloudStatus('Acceso requerido',true);setAuthGate({showForm:true});return}
+  if(!session)return;
+  setAuthGate({checking:true,showForm:true});
   const allowed=await window.VolanteoCloud.isAdmin();
   if(!allowed){await window.VolanteoCloud.adminSignOut();setCloudStatus('Acceso denegado',false);setAuthGate({showForm:true,message:'La cuenta existe, pero no tiene rol de administrador.'});return}
-  adminReady=true;$('#logoutBtn').hidden=false;$('#adminIdentity').textContent=session.user.email||'Administración';
+  adminReady=true;$('#logoutBtn').hidden=false;$('#adminIdentity').textContent=session.user?.email||'Administración';
   const remote=await window.VolanteoCloud.adminLoadState();
   if(remote)state=migrateState(remote);else{state=migrateState(defaultState());await window.VolanteoCloud.adminSaveState(state)}
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));setCloudStatus('Supabase · En línea',true);
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));setCloudStatus('En línea',true);
   await finishAdminBoot();
   cloudSubscription=await window.VolanteoCloud.subscribeAdmin(()=>cloudRefresh());
  }catch(err){
   console.error('Fallo de arranque administrativo',err);setCloudStatus('Error de conexión',false);
-  setAuthGate({showForm:true,message:`No se pudo validar el acceso: ${err?.message||'error de conexión'}`,retry:true});
+  setAuthGate({showForm:true,message:`No se pudo restaurar la sesión: ${err?.message||'error de conexión'}`,retry:true});
  }
 }
 async function submitAdminLogin(){
  const email=$('#adminEmail')?.value.trim(),password=$('#adminPassword')?.value||'',n=$('#adminLoginNotice'),btn=$('#adminLoginBtn');
  if(!email||!password){if(n){n.hidden=false;n.textContent='Captura correo y contraseña.'}return}
- if(n)n.hidden=true;if(btn){btn.disabled=true;btn.textContent='Verificando…'}
+ if(n)n.hidden=true;if(btn){btn.disabled=true;btn.textContent='Ingresando…'}
  try{
   await window.VolanteoCloud.adminSignIn(email,password);
   const allowed=await window.VolanteoCloud.isAdmin();

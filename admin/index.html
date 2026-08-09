@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?v=33">
+  <link rel="stylesheet" href="../assets/styles.css?rev=auth-stable">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -22,7 +22,7 @@
     </nav>
     <div class="sidebar-foot">
       <div class="sidebar-orbit"><span></span></div>
-      <div><strong>Operación Territorial</strong><small>Bienestar Sonora · v33</small></div>
+      <div><strong>Operación Territorial</strong><small>Bienestar Sonora</small></div>
     </div>
   </aside>
 
@@ -209,11 +209,8 @@
     <img src="../assets/brand/bienestar-horizontal.png" alt="Secretaría de Bienestar">
     <div class="eyebrow">Acceso administrativo</div>
     <h2>Centro de Operación Territorial</h2>
-    <div class="auth-checking" id="authChecking">
-      <span class="auth-spinner" aria-hidden="true"></span>
-      <p>Verificando tu acceso con Supabase…</p><small class="auth-build">Conexión segura · v33</small>
-    </div>
-    <div id="adminLoginForm" hidden>
+    <div class="auth-checking" id="authChecking" hidden><span class="auth-spinner" aria-hidden="true"></span><p>Restaurando sesión…</p></div>
+    <div id="adminLoginForm">
       <p>Inicia sesión con la cuenta administrativa registrada en Supabase.</p>
       <div class="field"><label for="adminEmail">Correo</label><input id="adminEmail" type="email" autocomplete="username" placeholder="correo@dominio.com"></div>
       <div class="field"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" autocomplete="current-password"></div>
@@ -224,9 +221,9 @@
   </div>
 </div>
 
-<script src="../assets/map-loader.js?v=33"></script>
-<script src="../assets/config.js?v=33"></script>
-<script src="../assets/cloud.js?v=33"></script>
-<script src="../assets/admin.js?v=33"></script>
+<script src="../assets/map-loader.js?rev=auth-stable"></script>
+<script src="../assets/config.js?rev=auth-stable"></script>
+<script src="../assets/cloud.js?rev=auth-stable"></script>
+<script src="../assets/admin.js?rev=auth-stable"></script>
 </body>
 </html>

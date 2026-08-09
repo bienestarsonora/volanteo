@@ -236,3 +236,43 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
 .auth-spinner{width:18px;height:18px;border-radius:50%;border:2px solid #ead7df;border-top-color:var(--brand);animation:auth-spin .75s linear infinite;flex:0 0 auto}
 @keyframes auth-spin{to{transform:rotate(360deg)}}
 .cloud-login-card #adminRetryBtn{margin-top:10px}
+
+/* Ajuste UX · acceso de brigadistas */
+.field-access-card{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.field-access-card .field{
+  gap:7px;
+}
+.field-access-card .field select,
+.field-access-card .field input{
+  min-height:46px;
+}
+.field-access-card select{
+  margin-bottom:0;
+}
+#pinField{
+  margin-top:0;
+}
+.field-access-card #enterBtn{
+  margin-top:0;
+  min-height:46px;
+  flex:0 0 auto;
+}
+.field-access-card #assignmentHint{
+  margin-top:0;
+  min-height:0;
+}
+@media(max-width:560px){
+  .field-access-card{
+    gap:12px;
+    padding:15px;
+  }
+  .field-access-card .field select,
+  .field-access-card .field input,
+  .field-access-card #enterBtn{
+    min-height:48px;
+  }
+}

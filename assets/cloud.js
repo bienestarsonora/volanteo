@@ -1,145 +1,131 @@
 (function(){
-  const cfg = window.VOLANTEO_CONFIG || {};
-  const url = String(cfg.SUPABASE_URL || '').trim();
-  const key = String(cfg.SUPABASE_PUBLISHABLE_KEY || cfg.SUPABASE_ANON_KEY || '').trim();
-  const enabled = Boolean(url && key);
-  let client = null;
-  let initPromise = null;
-  let createClientFn = null;
+  const cfg=window.VOLANTEO_CONFIG||{};
+  const base=String(cfg.SUPABASE_URL||'').trim().replace(/\/$/,'');
+  const key=String(cfg.SUPABASE_PUBLISHABLE_KEY||cfg.SUPABASE_ANON_KEY||'').trim();
+  const enabled=Boolean(base&&key);
+  const SESSION_KEY='volanteo_supabase_admin_session';
+  let pollHandles=new Set();
 
-  function timeout(promise, ms, label='La operación'){
+  function withTimeout(promise,ms,label='La operación'){
     let timer;
-    const limit = new Promise((_,reject)=>{
-      timer=setTimeout(()=>reject(new Error(`${label} tardó demasiado. Revisa tu conexión y vuelve a intentar.`)),ms);
-    });
+    const limit=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} tardó demasiado. Intenta de nuevo.`)),ms)});
     return Promise.race([promise,limit]).finally(()=>clearTimeout(timer));
   }
-
-  function loadScript(src,timeoutMs=5000){
-    return new Promise((resolve,reject)=>{
-      if(window.supabase?.createClient) return resolve(window.supabase.createClient);
-      let done=false;
-      const s=document.createElement('script');
-      const finish=(ok,err)=>{
-        if(done)return;done=true;clearTimeout(timer);
-        if(!ok)s.remove();
-        ok?resolve(window.supabase.createClient):reject(err||new Error('No se pudo cargar Supabase JS'));
-      };
-      s.src=src;s.async=true;s.crossOrigin='anonymous';
-      s.onload=()=>finish(Boolean(window.supabase?.createClient),new Error('Supabase JS cargó, pero createClient no quedó disponible.'));
-      s.onerror=()=>finish(false,new Error('No se pudo cargar '+src));
-      const timer=setTimeout(()=>finish(false,new Error('Tiempo de espera agotado al cargar '+src)),timeoutMs);
-      document.head.appendChild(s);
-    });
+  async function parseResponse(res){
+    const text=await res.text();
+    if(!text)return null;
+    try{return JSON.parse(text)}catch(_e){return text}
   }
-
-  async function ensureSupabaseLibrary(){
-    if(createClientFn)return createClientFn;
-    if(window.supabase?.createClient){createClientFn=window.supabase.createClient;return createClientFn;}
-
-    // v33: SDK moderno compatible con publishable keys. Primero ESM; después UMD.
-    const moduleSources=[
-      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.0/+esm'
-    ];
-    const scriptSources=[
-      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.0/dist/umd/supabase.min.js',
-      'https://unpkg.com/@supabase/supabase-js@2.112.0/dist/umd/supabase.min.js',
-      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
-    ];
-    let lastError=null;
-    for(const src of moduleSources){
-      try{
-        const mod=await timeout(import(src),6000,'La carga del cliente Supabase');
-        if(typeof mod?.createClient==='function'){createClientFn=mod.createClient;return createClientFn;}
-      }catch(err){lastError=err;console.warn('Falló Supabase ESM',src,err)}
+  function apiError(data,res){
+    const msg=(data&&typeof data==='object'&&(data.msg||data.message||data.error_description||data.error||data.hint))||
+      (typeof data==='string'&&data)||`Error ${res.status}`;
+    const err=new Error(String(msg));err.status=res.status;err.payload=data;return err;
+  }
+  function readStoredSession(){
+    try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(_e){return null}
+  }
+  function storeSession(session){
+    if(!session){localStorage.removeItem(SESSION_KEY);return}
+    const expiresAt=session.expires_at||Math.floor(Date.now()/1000)+Number(session.expires_in||3600);
+    localStorage.setItem(SESSION_KEY,JSON.stringify({...session,expires_at:expiresAt}));
+  }
+  async function authFetch(path,{method='GET',body=null,token=null,timeoutMs=10000}={}){
+    const headers={'apikey':key,'Content-Type':'application/json'};
+    if(token)headers.Authorization=`Bearer ${token}`;
+    const req=fetch(`${base}${path}`,{method,headers,body:body==null?undefined:JSON.stringify(body),cache:'no-store'});
+    const res=await withTimeout(req,timeoutMs,'La conexión con Supabase');
+    const data=await parseResponse(res);
+    if(!res.ok)throw apiError(data,res);
+    return data;
+  }
+  async function refreshSession(session){
+    if(!session?.refresh_token)return null;
+    const data=await authFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},timeoutMs:10000});
+    storeSession(data);return readStoredSession();
+  }
+  async function getValidSession({verify=true}={}){
+    let session=readStoredSession();
+    if(!session?.access_token)return null;
+    const now=Math.floor(Date.now()/1000);
+    if(Number(session.expires_at||0)<=now+30){
+      try{session=await refreshSession(session)}catch(err){storeSession(null);throw err}
     }
-    for(const src of scriptSources){
-      try{createClientFn=await loadScript(src,5000);if(createClientFn)return createClientFn}
-      catch(err){lastError=err;console.warn('Falló Supabase UMD',src,err)}
+    if(!verify)return session;
+    try{
+      const user=await authFetch('/auth/v1/user',{token:session.access_token,timeoutMs:7000});
+      session.user=user;storeSession(session);return session;
+    }catch(err){
+      if(err.status===401){storeSession(null);return null}
+      throw err;
     }
-    throw lastError||new Error('No se pudo cargar Supabase JS desde ningún proveedor.');
   }
-
-  async function init(){
-    if(!enabled) return null;
-    if(client) return client;
-    if(!initPromise) initPromise=(async()=>{
-      const createClient=await ensureSupabaseLibrary();
-      client=createClient(url,key,{
-        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true},
-        global:{headers:{'x-application-name':'volanteo-bienestar-sonora'}}
-      });
-      return client;
-    })().catch(err=>{initPromise=null;throw err});
-    return timeout(initPromise,12000,'La conexión con Supabase');
-  }
-
-  async function getSession(){
-    const c=await init();if(!c)return null;
-    const {data,error}=await timeout(c.auth.getSession(),7000,'La verificación de sesión');
-    if(error)throw error;return data.session;
-  }
+  async function init(){if(!enabled)return null;return {native:true,url:base}}
+  async function getSession(){if(!enabled)return null;return getValidSession({verify:true})}
   async function adminSignIn(email,password){
-    const c=await init();
-    const {data,error}=await timeout(c.auth.signInWithPassword({email,password}),12000,'El inicio de sesión');
-    if(error)throw error;return data.session;
+    if(!enabled)throw new Error('Supabase no está configurado.');
+    const data=await authFetch('/auth/v1/token?grant_type=password',{method:'POST',body:{email,password},timeoutMs:12000});
+    storeSession(data);return readStoredSession();
   }
-  async function adminSignOut(){const c=await init();if(c)await timeout(c.auth.signOut(),7000,'El cierre de sesión')}
-  async function isAdmin(){
-    const c=await init();
-    const {data,error}=await timeout(c.rpc('is_admin'),9000,'La validación del rol administrador');
-    if(error)throw error;return Boolean(data);
+  async function adminSignOut(){
+    const session=readStoredSession();
+    try{if(session?.access_token)await authFetch('/auth/v1/logout',{method:'POST',token:session.access_token,timeoutMs:5000})}catch(_e){}
+    storeSession(null);
   }
+  async function request(path,{method='GET',body=null,admin=false,headers={},timeoutMs=12000,retry=true}={}){
+    let session=admin?await getValidSession({verify:false}):null;
+    const h={'apikey':key,'Accept':'application/json',...headers};
+    if(body!=null)h['Content-Type']='application/json';
+    if(session?.access_token)h.Authorization=`Bearer ${session.access_token}`;
+    const doFetch=async()=>{
+      const res=await withTimeout(fetch(`${base}${path}`,{method,headers:h,body:body==null?undefined:JSON.stringify(body),cache:'no-store'}),timeoutMs,'La operación con Supabase');
+      const data=await parseResponse(res);
+      if(!res.ok)throw apiError(data,res);return data;
+    };
+    try{return await doFetch()}catch(err){
+      if(admin&&retry&&err.status===401&&session?.refresh_token){
+        session=await refreshSession(session);h.Authorization=`Bearer ${session.access_token}`;return doFetch();
+      }
+      throw err;
+    }
+  }
+  async function rpc(name,args={},admin=false){return request(`/rest/v1/rpc/${encodeURIComponent(name)}`,{method:'POST',body:args,admin,timeoutMs:12000})}
+  async function isAdmin(){return Boolean(await rpc('is_admin',{},true))}
 
-  function findRoute(state,routeId){
-    for(const j of state?.journeys||[])for(const e of j.exercises||[])for(const r of e.routes||[])if(String(r.id)===String(routeId))return r;
-    return null;
-  }
+  function findRoute(state,routeId){for(const j of state?.journeys||[])for(const e of j.exercises||[])for(const r of e.routes||[])if(String(r.id)===String(routeId))return r;return null}
   async function hydrateRuntime(state){
-    const c=await init();if(!c||!state)return state;
-    const [{data:runtime,error:rerr},{data:reports,error:perr}] = await timeout(Promise.all([
-      c.from('route_runtime').select('*'),
-      c.from('route_reports').select('*').order('reported_at',{ascending:true})
-    ]),12000,'La carga del seguimiento');
-    if(rerr) throw rerr;if(perr) throw perr;
+    if(!state)return state;
+    const [runtime,reports]=await Promise.all([
+      request('/rest/v1/route_runtime?select=*',{admin:true}),
+      request('/rest/v1/route_reports?select=*&order=reported_at.asc',{admin:true})
+    ]);
     const reportMap=new Map();
     for(const rep of reports||[]){const arr=reportMap.get(rep.route_id)||[];arr.push({id:rep.id,number:rep.block_number,reportedAt:rep.reported_at,reportedBy:rep.reported_by||'',brigadistaId:rep.brigadista_id,lat:rep.lat,lng:rep.lng});reportMap.set(rep.route_id,arr)}
-    for(const rt of runtime||[]){
-      const r=findRoute(state,rt.route_id);if(!r)continue;
-      r.status=rt.status||r.status||'pending';r.progress=Number(rt.progress||0);r.completedBlocks=Number(rt.completed_blocks||0);r.completedUnits=Number(rt.completed_units ?? r.completedBlocks ?? 0);
-      r.startedAt=rt.started_at||r.startedAt;r.finishedAt=rt.finished_at||r.finishedAt;r.lastPosition=rt.last_position||null;r.lastPositionAt=rt.last_position_at||null;r.lastProgressAt=rt.last_progress_at||null;
-      r.blockReports=reportMap.get(rt.route_id)||[];
-    }
+    for(const rt of runtime||[]){const r=findRoute(state,rt.route_id);if(!r)continue;r.status=rt.status||r.status||'pending';r.progress=Number(rt.progress||0);r.completedBlocks=Number(rt.completed_blocks||0);r.completedUnits=Number(rt.completed_units??r.completedBlocks??0);r.startedAt=rt.started_at||r.startedAt;r.finishedAt=rt.finished_at||r.finishedAt;r.lastPosition=rt.last_position||null;r.lastPositionAt=rt.last_position_at||null;r.lastProgressAt=rt.last_progress_at||null;r.blockReports=reportMap.get(rt.route_id)||[]}
     return state;
   }
   async function adminLoadState(){
-    const c=await init();
-    const {data,error}=await timeout(c.from('app_state').select('state').eq('id','main').maybeSingle(),10000,'La carga de la planeación');
-    if(error)throw error;return data?.state ? hydrateRuntime(data.state) : null;
+    const rows=await request('/rest/v1/app_state?id=eq.main&select=state',{admin:true,timeoutMs:10000});
+    return rows?.[0]?.state?hydrateRuntime(rows[0].state):null;
   }
   async function adminSaveState(state){
-    const c=await init();
-    const {error}=await timeout(c.from('app_state').upsert({id:'main',state,updated_at:new Date().toISOString()},{onConflict:'id'}),12000,'El guardado de la planeación');
-    if(error)throw error;
-    const {error:syncError}=await timeout(c.rpc('admin_sync_brigadistas',{p_people:state?.brigadistas||[]}),12000,'La sincronización de brigadistas');
-    if(syncError)throw syncError;return true;
+    await request('/rest/v1/app_state?on_conflict=id',{method:'POST',admin:true,body:{id:'main',state,updated_at:new Date().toISOString()},headers:{'Prefer':'resolution=merge-duplicates,return=minimal'}});
+    await rpc('admin_sync_brigadistas',{p_people:state?.brigadistas||[]},true);return true;
   }
   async function subscribeAdmin(onChange){
-    const c=await init();
-    const channel=c.channel('volanteo-admin-live')
-      .on('postgres_changes',{event:'*',schema:'public',table:'app_state'},()=>onChange('state'))
-      .on('postgres_changes',{event:'*',schema:'public',table:'route_runtime'},()=>onChange('runtime'))
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'route_reports'},()=>onChange('report'))
-      .subscribe();
-    return channel;
+    // Sin dependencias externas: refresco casi inmediato y estable en GitHub Pages.
+    let busy=false;
+    const id=setInterval(async()=>{if(document.hidden||busy)return;busy=true;try{await onChange('poll')}finally{busy=false}},2500);
+    pollHandles.add(id);
+    return {unsubscribe(){clearInterval(id);pollHandles.delete(id)}};
   }
-  async function fieldListBrigadistas(){const c=await init();const {data,error}=await timeout(c.rpc('field_list_brigadistas'),10000,'La carga de brigadistas');if(error)throw error;return data||[]}
-  async function fieldGetAssignment(brigadistaId,pin){const c=await init();const {data,error}=await timeout(c.rpc('field_get_assignment',{p_brigadista_id:brigadistaId,p_pin:String(pin||'')}),10000,'La carga de la asignación');if(error)throw error;return data}
-  async function fieldStart(brigadistaId,pin,routeId){const c=await init();const {data,error}=await timeout(c.rpc('field_start_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId}),10000,'El inicio del recorrido');if(error)throw error;return data}
-  async function fieldReportBlock(brigadistaId,pin,routeId,position){const c=await init();const {data,error}=await timeout(c.rpc('field_report_block',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position?.lat??null,p_lng:position?.lng??null}),10000,'El reporte de cuadra');if(error)throw error;return data}
-  async function fieldReportProgress(brigadistaId,pin,routeId){const c=await init();const {data,error}=await timeout(c.rpc('field_report_progress',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId}),10000,'El reporte de avance');if(error)throw error;return data}
-  async function fieldLocation(brigadistaId,pin,routeId,position){const c=await init();const {data,error}=await timeout(c.rpc('field_update_location',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position.lat,p_lng:position.lng,p_accuracy_m:position.accuracy??null}),10000,'La actualización GPS');if(error)throw error;return data}
-  async function fieldFinish(brigadistaId,pin,routeId){const c=await init();const {data,error}=await timeout(c.rpc('field_finish_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId}),10000,'El cierre del recorrido');if(error)throw error;return data}
+
+  async function fieldListBrigadistas(){return (await rpc('field_list_brigadistas',{},false))||[]}
+  async function fieldGetAssignment(brigadistaId,pin){return rpc('field_get_assignment',{p_brigadista_id:brigadistaId,p_pin:String(pin||'')},false)}
+  async function fieldStart(brigadistaId,pin,routeId){return rpc('field_start_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
+  async function fieldReportBlock(brigadistaId,pin,routeId,position){return rpc('field_report_block',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position?.lat??null,p_lng:position?.lng??null},false)}
+  async function fieldReportProgress(brigadistaId,pin,routeId){return rpc('field_report_progress',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
+  async function fieldLocation(brigadistaId,pin,routeId,position){return rpc('field_update_location',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position.lat,p_lng:position.lng,p_accuracy_m:position.accuracy??null},false)}
+  async function fieldFinish(brigadistaId,pin,routeId){return rpc('field_finish_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
 
   window.VolanteoCloud={enabled,init,getSession,adminSignIn,adminSignOut,isAdmin,adminLoadState,adminSaveState,subscribeAdmin,fieldListBrigadistas,fieldGetAssignment,fieldStart,fieldReportBlock,fieldReportProgress,fieldLocation,fieldFinish};
 })();
