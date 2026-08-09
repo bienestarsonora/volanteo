@@ -190,3 +190,7 @@ Después de esa prueba, ya puedes usar la plataforma como piloto real.
 - Carga ESM con fallback UMD.
 - Ninguna verificación puede quedar indefinidamente en estado “Verificando…”.
 - Timeouts explícitos muestran un error recuperable si CDN, Auth o Data API no responden.
+
+
+## Producción: autenticación administrativa
+El login usa un formulario nativo, mensajes de estado visibles y archivos JS con nombres nuevos para evitar caché de builds anteriores en GitHub Pages.

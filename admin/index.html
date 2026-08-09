@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?rev=auth-stable">
+  <link rel="stylesheet" href="../assets/styles.css?build=prod-auth">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -210,20 +210,20 @@
     <div class="eyebrow">Acceso administrativo</div>
     <h2>Centro de Operación Territorial</h2>
     <div class="auth-checking" id="authChecking" hidden><span class="auth-spinner" aria-hidden="true"></span><p>Restaurando sesión…</p></div>
-    <div id="adminLoginForm">
+    <form id="adminLoginForm" novalidate>
       <p>Inicia sesión con la cuenta administrativa registrada en Supabase.</p>
       <div class="field"><label for="adminEmail">Correo</label><input id="adminEmail" type="email" autocomplete="username" placeholder="correo@dominio.com"></div>
       <div class="field"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" autocomplete="current-password"></div>
-      <button class="btn btn-primary btn-block" id="adminLoginBtn" type="button">Ingresar al panel</button>
-    </div>
-    <div class="notice" id="adminLoginNotice" hidden></div>
+      <button class="btn btn-primary btn-block" id="adminLoginBtn" type="submit">Ingresar al panel</button>
+    </form>
+    <div class="notice" id="adminLoginNotice" role="status" aria-live="polite" hidden></div>
     <button class="btn btn-soft btn-block" id="adminRetryBtn" type="button" hidden>Reintentar conexión</button>
   </div>
 </div>
 
-<script src="../assets/map-loader.js?rev=auth-stable"></script>
-<script src="../assets/config.js?rev=auth-stable"></script>
-<script src="../assets/cloud.js?rev=auth-stable"></script>
-<script src="../assets/admin.js?rev=auth-stable"></script>
+<script src="../assets/map-runtime.js"></script>
+<script src="../assets/config.js?build=prod-auth"></script>
+<script src="../assets/cloud-auth.js"></script>
+<script src="../assets/admin-app.js"></script>
 </body>
 </html>
