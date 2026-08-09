@@ -7,7 +7,7 @@ No contiene `service_role`, secret key ni contraseña de base de datos.
 
 # Volanteo · Centro de Operación Territorial
 
-Versión **v31 · GitHub Pages + Supabase** preparada para publicarse como:
+Versión **v33 · GitHub Pages + Supabase** preparada para publicarse como:
 
 `https://bienestarsonora.github.io/volanteo/`
 
@@ -21,6 +21,20 @@ Versión **v31 · GitHub Pages + Supabase** preparada para publicarse como:
 - El panel administrativo recibe cambios mediante **Supabase Realtime**.
 - La vista de brigadista refresca su asignación/avance automáticamente mientras está abierta.
 - El navegador ya no depende de `localhost`, PowerShell ni archivos `.bat`.
+
+---
+
+
+## v33 · Autenticación obligatoria y carga robusta del mapa
+
+- `/admin/` ahora trabaja en modo **fail-closed**: el panel permanece oculto hasta confirmar una sesión válida de Supabase Auth y el rol `admin`.
+- Si no existe sesión, se muestra únicamente la pantalla de acceso administrativo.
+- Si Supabase no puede validar la sesión, el panel no se expone y aparece una opción de reintento.
+- El mapa administrativo se inicializa solamente después de revelar el panel autenticado, evitando cálculos de tamaño sobre un contenedor oculto.
+- Leaflet mantiene fallback entre varios CDN y el mapa incluye un botón de reintento sin perder la planeación.
+- La carga de Supabase JS también tiene una fuente de respaldo.
+
+> Esta actualización es solo de frontend: si ya ejecutaste `supabase/schema.sql`, **no necesitas volver a ejecutar el SQL**.
 
 ---
 
@@ -169,3 +183,10 @@ Haz esta prueba completa con dos dispositivos:
 10. Admin confirma que la ruta aparece como finalizada y no puede reiniciarse desde campo.
 
 Después de esa prueba, ya puedes usar la plataforma como piloto real.
+
+
+## v33 — autenticación Supabase robusta
+- Actualiza el cliente web de Supabase a 2.112.x, compatible con publishable keys actuales.
+- Carga ESM con fallback UMD.
+- Ninguna verificación puede quedar indefinidamente en estado “Verificando…”.
+- Timeouts explícitos muestran un error recuperable si CDN, Auth o Data API no responden.

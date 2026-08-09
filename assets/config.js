@@ -4,7 +4,7 @@
 // 3) Pega ambos valores aquí. La publishable key puede estar en el frontend;
 //    la seguridad real la aplican RLS y las funciones SQL de /supabase/schema.sql.
 window.VOLANTEO_CONFIG={
-  APP_VERSION:'31.0.0',
+  APP_VERSION:'33.0.0',
   DEFAULT_CENTER:[29.0729,-110.9559],
   DEFAULT_ZOOM:13,
   SUPABASE_URL:'https://yurenojjafrbdnstnttd.supabase.co',
