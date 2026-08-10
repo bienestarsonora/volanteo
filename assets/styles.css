@@ -276,3 +276,107 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
     min-height:48px;
   }
 }
+
+/* =========================================================
+   Mobile access · Administración visible y navegación clara
+   ========================================================= */
+@media(max-width:760px){
+  /* La liga a Administración nunca debe desaparecer en campo. */
+  .field-header-actions{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .field-header-actions .header-link{
+    display:inline-flex!important;
+    align-items:center;
+    justify-content:center;
+    min-height:38px;
+    padding:0 12px;
+    border:1px solid #ead6e0;
+    border-radius:999px;
+    background:#fff7fb;
+    color:var(--brand-deep);
+    font-size:10px;
+    font-weight:850;
+    letter-spacing:.01em;
+    box-shadow:0 5px 16px rgba(83,7,42,.06);
+    white-space:nowrap;
+  }
+  .field-header-actions .header-link:before{
+    content:"⌘";
+    display:inline-grid;
+    place-items:center;
+    margin-right:6px;
+    width:17px;
+    height:17px;
+    border-radius:6px;
+    background:var(--brand);
+    color:#fff;
+    font-size:9px;
+    line-height:1;
+  }
+
+  /* Menú administrativo móvil más reconocible. */
+  .strategist-ui .hamburger{
+    display:inline-grid;
+    place-items:center;
+    width:40px;
+    height:40px;
+    flex:0 0 40px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    background:#fff;
+    color:var(--brand-deep);
+    box-shadow:0 5px 16px rgba(83,7,42,.05);
+  }
+  .strategist-ui .app-sidebar{
+    width:min(82vw,280px);
+    box-shadow:18px 0 50px rgba(41,4,23,.25);
+  }
+  .strategist-ui .sidebar-nav{
+    gap:7px;
+  }
+  .strategist-ui .nav-item{
+    min-height:46px;
+    font-size:13px;
+  }
+  .strategist-ui .app-header-clean{
+    min-height:64px;
+    height:auto;
+    padding:10px 12px;
+  }
+  .strategist-ui .header-left{
+    min-width:0;
+    gap:10px;
+  }
+  .strategist-ui .product-name{
+    min-width:0;
+  }
+  .strategist-ui .product-name strong{
+    font-size:14px;
+  }
+  .strategist-ui .header-actions{
+    gap:6px;
+  }
+  .strategist-ui .header-actions > .header-link:not(.header-button){
+    display:none;
+  }
+}
+
+@media(max-width:420px){
+  .field-header{
+    gap:10px;
+  }
+  .field-logo{
+    max-width:188px;
+    height:auto;
+  }
+  .field-header-actions .header-link{
+    padding:0 10px;
+    font-size:9px;
+  }
+  .field-header-actions .header-link:before{
+    margin-right:4px;
+  }
+}
