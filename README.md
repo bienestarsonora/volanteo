@@ -31,3 +31,7 @@ El buscador administrativo funciona únicamente como referencia temporal: selecc
 - Durante el dibujo, el botón principal cambia a **Finalizar trazado** al existir al menos un tramo.
 - Finalizar bloquea la captura accidental de nuevos puntos y conserva la distancia/meta calculada.
 - El trazado puede reabrirse con **Continuar editando trazado** antes de guardar.
+
+
+## Ajuste de análisis vial
+El cierre de una zona ya no usa la descarga masiva de OSM como respaldo automático. El análisis vial tiene un límite de espera aproximado de 11 segundos; si las fuentes no responden, el polígono se conserva y se habilitan reintento y meta provisional.

@@ -639,30 +639,36 @@ async function analyzeZone(pts,{silent=false,force=false}={}){
  const sessionAtStart=drawSessionId,runId=++analysisRunId;
  const stillCurrent=()=>runId===analysisRunId&&sessionAtStart===drawSessionId;
  const status=$('#coverageAnalysis'),retry=$('#retryAnalysisBtn');
- // Regla v27: una consulta nueva NUNCA destruye un análisis que ya era válido.
- // Esto es especialmente importante al pulsar "Reintentar": si la red falla,
- // conservamos la última meta útil y solo mostramos una advertencia.
+ // Nunca destruir un análisis válido por una falla temporal de red.
  const cachedBeforeRun=readAnalysisCache(polygon);
  const previousValid=(roadAnalysis&&(roadAnalysis.streetCount||roadAnalysis.blockCount))?roadAnalysis:((cachedBeforeRun?.streetCount||cachedBeforeRun?.blockCount)?cachedBeforeRun:null);
  manualGoalOverride=null;showManualGoalFallback(false);
  if($('#manualGoalInput'))$('#manualGoalInput').value='';
  if(retry){retry.hidden=true;retry.disabled=true}
- if(!force&&cachedBeforeRun){if(!stillCurrent())return null;roadAnalysis=cachedBeforeRun;if(status){status.className='coverage-analysis success';status.textContent=`Detectamos ${roadAnalysis.streetCount} ${roadAnalysis.streetCount===1?'calle operativa':'calles operativas'} y ${roadAnalysis.blockCount} ${roadAnalysis.blockCount===1?'cuadra estimada':'cuadras estimadas'} dentro de la zona.`}refreshDraft();updateGoal();renderStreetReview();if(retry)retry.disabled=false;return roadAnalysis}
- if(status){status.className='coverage-analysis loading';status.textContent='Consultando la red vial del sector…'}
+ if(!force&&cachedBeforeRun){
+  if(!stillCurrent())return null;
+  roadAnalysis=cachedBeforeRun;
+  if(status){status.className='coverage-analysis success';status.textContent=`Detectamos ${roadAnalysis.streetCount} ${roadAnalysis.streetCount===1?'calle operativa':'calles operativas'} y ${roadAnalysis.blockCount} ${roadAnalysis.blockCount===1?'cuadra estimada':'cuadras estimadas'} dentro de la zona.`}
+  refreshDraft();updateGoal();renderStreetReview();if(retry)retry.disabled=false;return roadAnalysis;
+ }
+ if(status){status.className='coverage-analysis loading';status.textContent='Analizando la red vial del sector…'}
  const box=zoneBBox(polygon);
- const query=`[out:json][timeout:18];way["highway"~"^(residential|living_street|unclassified|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|service|road)$"](${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)});out body geom;`;
+ const query=`[out:json][timeout:8];way["highway"~"^(residential|living_street|unclassified|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|service|road)$"](${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)});out body geom;`;
  const endpoints=overpassEndpoints(),errors=[];
+ // Límite duro de experiencia: no mantener al usuario esperando indefinidamente.
+ // Probamos fuentes una por una con ventanas cortas y abandonamos al llegar a ~11 s.
+ const deadline=Date.now()+11000;
  for(let i=0;i<endpoints.length;i++){
+  const remaining=deadline-Date.now();
+  if(remaining<1200)break;
   const endpoint=endpoints[i];
+  const attemptTimeout=Math.max(1000,Math.min(4200,remaining-250));
   try{
-   if(status){status.className='coverage-analysis loading';status.textContent=`Analizando calles del sector… fuente ${i+1} de ${endpoints.length+1}.`}
-   const data=await fetchOverpassRoads(query,endpoint,Number((window.VOLANTEO_CONFIG||{}).OVERPASS_TIMEOUT_MS||12000));
+   if(status){status.className='coverage-analysis loading';status.textContent=`Analizando calles del sector… intento ${i+1}.`}
+   const data=await fetchOverpassRoads(query,endpoint,attemptTimeout);
    const analysis=chunkRoadWays(data.elements||[],polygon);
    if(!analysis.streetCount&&!analysis.blockCount)throw new Error('La respuesta no contiene vialidades utilizables');
    if(!stillCurrent())return null;
-   // IMPORTANTE v27: desde este punto el análisis ya fue aceptado.
-   // Ningún error de renderizado posterior debe hacer que probemos otra fuente
-   // ni que se pierda la meta correcta que acabamos de calcular.
    roadAnalysis=analysis;
    lastAcceptedAnalysis=analysis;lastAcceptedPolygonKey=analysisCacheKey(polygon);
    writeAnalysisCache(polygon,analysis);
@@ -677,40 +683,20 @@ async function analyzeZone(pts,{silent=false,force=false}={}){
     try{updateGoal()}catch(_e){}
    }
    return acceptedAnalysis;
-  }catch(err){errors.push(`${endpoint}: ${err?.name==='AbortError'?'tiempo agotado':err?.message||'error'}`)}
- }
- // Respaldo independiente: API principal de OSM para sectores pequeños.
- try{
-  if(status){status.className='coverage-analysis loading';status.textContent='Intentando una fuente cartográfica de respaldo…'}
-  const data=await fetchOsmMapFallback(box,Number((window.VOLANTEO_CONFIG||{}).OVERPASS_TIMEOUT_MS||12000));
-  const analysis=chunkRoadWays(data.elements||[],polygon);
-  if(!analysis.streetCount&&!analysis.blockCount)throw new Error('El respaldo no contiene vialidades utilizables');
-  if(!stillCurrent())return null;
-  // Respaldo aceptado: desde aquí el valor queda bloqueado aunque falle el render.
-  roadAnalysis=analysis;
-  lastAcceptedAnalysis=analysis;lastAcceptedPolygonKey=analysisCacheKey(polygon);
-  writeAnalysisCache(polygon,analysis);
-  const acceptedAnalysis=roadAnalysis;
-  try{
-   if(status){status.className='coverage-analysis success';status.textContent=`Detectamos ${acceptedAnalysis.streetCount} ${acceptedAnalysis.streetCount===1?'calle operativa':'calles operativas'} y ${acceptedAnalysis.blockCount} ${acceptedAnalysis.blockCount===1?'cuadra estimada':'cuadras estimadas'} dentro de la zona.`}
-   if(retry){retry.hidden=true;retry.disabled=false}
-   showManualGoalFallback(false);
-   refreshDraft();updateGoal();renderStreetReview();
-  }catch(uiErr){
-   console.warn('El análisis vial de respaldo quedó guardado, pero falló una actualización visual no crítica:',uiErr);
-   try{updateGoal()}catch(_e){}
+  }catch(err){
+   errors.push(`${endpoint}: ${err?.name==='AbortError'?'tiempo agotado':err?.message||'error'}`);
   }
-  return acceptedAnalysis;
- }catch(err){errors.push(`OSM respaldo: ${err?.name==='AbortError'?'tiempo agotado':err?.message||'error'}`)}
- // Si alguna fuente alcanzó a producir un resultado válido antes de que otra tarea
- // fallara, ese resultado actual tiene prioridad sobre el snapshot de inicio.
+ }
+ // Importante: NO usamos la descarga masiva /api/0.6/map como respaldo automático.
+ // En sectores urbanos puede ser pesada y era la causa de que la interfaz pareciera
+ // quedarse procesando sin fin. Ante falla de Overpass, devolvemos el control al usuario.
  const validAtEnd=(roadAnalysis&&(Number(roadAnalysis.streetCount)>0||Number(roadAnalysis.blockCount)>0))?roadAnalysis:previousValid;
  if(validAtEnd){
   roadAnalysis=validAtEnd;
   if(status){
    status.className='coverage-analysis warning';
    const unitText=goalType==='cuadras'?`${roadAnalysis.blockCount} ${roadAnalysis.blockCount===1?'cuadra estimada':'cuadras estimadas'}`:`${roadAnalysis.streetCount} ${roadAnalysis.streetCount===1?'calle operativa':'calles operativas'}`;
-   status.textContent=`No pudimos actualizar la red vial en este intento. Conservamos el último análisis válido: ${unitText}. Puedes guardar la ruta o reintentar después.`;
+   status.textContent=`La red vial no respondió a tiempo. Conservamos el último análisis válido: ${unitText}. Puedes guardar la ruta o reintentar.`;
   }
   if(retry){retry.hidden=false;retry.disabled=false}
   showManualGoalFallback(false);
@@ -725,7 +711,7 @@ async function analyzeZone(pts,{silent=false,force=false}={}){
   if(status){
    status.className='coverage-analysis warning';
    const unitText=goalType==='cuadras'?`${roadAnalysis.blockCount} ${roadAnalysis.blockCount===1?'cuadra estimada':'cuadras estimadas'}`:`${roadAnalysis.streetCount} ${roadAnalysis.streetCount===1?'calle operativa':'calles operativas'}`;
-   status.textContent=`La actualización externa no terminó correctamente, pero conservamos el análisis válido: ${unitText}. Puedes guardar la ruta.`;
+   status.textContent=`La consulta externa no respondió a tiempo, pero conservamos el análisis válido: ${unitText}. Puedes guardar la ruta.`;
   }
   if(retry){retry.hidden=false;retry.disabled=false}
   showManualGoalFallback(false);
@@ -735,12 +721,11 @@ async function analyzeZone(pts,{silent=false,force=false}={}){
  roadAnalysis=null;
  if(status){
   status.className='coverage-analysis error';
-  if(location.protocol==='file:') status.textContent='Abre la app desde GitHub Pages o un servidor web; el modo file:// puede bloquear consultas cartográficas.';
-  else status.textContent='No pudimos consultar la red vial en este momento. La zona sigue guardada: reintenta sin volver a dibujar.';
+  status.textContent='La red vial no respondió en el tiempo límite. Tu zona quedó intacta: puedes reintentar o capturar una meta provisional sin volver a dibujar.';
  }
  if(retry){retry.hidden=false;retry.disabled=false}
  showManualGoalFallback(true);
- if(!silent)console.warn('Falló el análisis vial en todas las fuentes:',errors);
+ if(!silent)console.warn('Falló el análisis vial dentro del tiempo límite:',errors);
  updateGoal();return null;
 }
 function clearRoadAnalysis(){
