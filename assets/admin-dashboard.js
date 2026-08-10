@@ -7,7 +7,8 @@ const liveChannel=('BroadcastChannel' in window)?new BroadcastChannel(LIVE_CHANN
 const cloudMode=Boolean(window.VolanteoCloud?.enabled);
 let adminReady=false,cloudSaveTimer=null,cloudApplying=false,cloudSubscription=null;
 let cloudSaveInFlight=null,cloudPendingWrite=null,cloudSaveSeq=0,cloudLastMutationAt=0;
-let map=null,draftLayer=null,draftVertexLayer=null,roadLayer=null,venueMarker=null,drawing=false,draft=[],mode='volanteo',coverageMode='zone',goalType='calles',mapFilter='exercise',editingRouteId=null,roadAnalysis=null,manualGoalOverride=null,drawSessionId=0,analysisRunId=0,lastAcceptedAnalysis=null,lastAcceptedPolygonKey='';
+let map=null,draftLayer=null,draftVertexLayer=null,roadLayer=null,venueMarker=null,searchPreviewMarker=null,drawing=false,draft=[],mode='volanteo',coverageMode='zone',goalType='calles',mapFilter='exercise',editingRouteId=null,roadAnalysis=null,manualGoalOverride=null,drawSessionId=0,analysisRunId=0,lastAcceptedAnalysis=null,lastAcceptedPolygonKey='';
+let mapSearchPreview=null,mapContextKey=null;
 let routeMemberDraftIds=[],routeMemberDraftExerciseId=null;
 let geocodeLastRequestAt=0;
 const geocodeCache=new Map();
@@ -56,6 +57,9 @@ function migrateState(s){
  s.brigadistas.forEach(p=>{if(!p.pin)p.pin='1234';});
  const byName=new Map(s.brigadistas.map(p=>[p.name,p]));
  for(const j of s.journeys||[]){
+  // Las búsquedas antiguas guardaban automáticamente una ubicación como sede.
+  // Desde ahora solo se conserva una referencia si fue confirmada explícitamente.
+  if(j.locationReference&&j.locationReference.confirmed!==true)delete j.locationReference;
   for(const e of j.exercises||[]){
    for(const r of e.routes||[]){
     if(!Array.isArray(r.memberIds))r.memberIds=(r.members||[]).map(n=>byName.get(n)?.id).filter(Boolean);
@@ -746,12 +750,27 @@ function clearRoadAnalysis(){
 function renderRoadSegments(segments,color,opacity=.55,weight=3){if(!map||!segments?.length)return null;const group=L.layerGroup();segments.forEach(seg=>L.polyline(seg,{color,weight,opacity,className:'street-analysis-line'}).addTo(group));group.addTo(map);return group}
 function addRouteToMap(r,opacity=.82){if(!map||!r.pts?.length)return;if(r.type==='volanteo'&&r.coverageMode==='zone'){L.polygon(r.pts,{color:r.color,weight:4,opacity,fillColor:r.color,fillOpacity:.05*opacity}).addTo(map).bindTooltip(`${r.name} · ${routeMemberNames(r).join(', ')||'Sin equipo'}`);if(r.streetSegments?.length)renderRoadSegments(r.streetSegments,r.color,Math.min(.8,opacity),3);(r.blockReports||[]).filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng))).forEach(rep=>L.circleMarker([Number(rep.lat),Number(rep.lng)],{radius:5,color:'#fff',weight:2,fillColor:'#239b73',fillOpacity:1}).addTo(map).bindTooltip(`Cuadra ${rep.number} reportada`))}else L.polyline(r.pts,{color:r.color,weight:6,opacity}).addTo(map).bindTooltip(`${r.name} · ${routeMemberNames(r).join(', ')||'Sin equipo'}`);if(r.status==='live'&&r.lastPosition&&Number.isFinite(Number(r.lastPosition.lat))&&Number.isFinite(Number(r.lastPosition.lng)))L.circleMarker([Number(r.lastPosition.lat),Number(r.lastPosition.lng)],{radius:8,color:'#fff',weight:3,fillColor:r.color,fillOpacity:1}).addTo(map).bindTooltip(`${r.name} · ubicación en vivo`)}
 
+function clearMapSearchPreview({clearInput=false}={}){
+ mapSearchPreview=null;
+ if(searchPreviewMarker&&map&&map.hasLayer(searchPreviewMarker))map.removeLayer(searchPreviewMarker);
+ searchPreviewMarker=null;
+ const results=$('#mapSearchResults');if(results){results.hidden=true;results.innerHTML=''}
+ if(clearInput&&$('#mapSearchInput'))$('#mapSearchInput').value='';
+ const status=$('#mapSearchStatus');if(status)status.textContent='El buscador solo te orienta: no fija ni guarda la sede de la Jornada.';
+}
+function drawMapSearchPreview(){
+ searchPreviewMarker=null;if(!map||!mapSearchPreview)return null;
+ const lat=Number(mapSearchPreview.lat),lng=Number(mapSearchPreview.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+ searchPreviewMarker=L.circleMarker([lat,lng],{radius:8,color:'#fff',weight:3,fillColor:'#5f6670',fillOpacity:.92,dashArray:'3 2'}).addTo(map)
+  .bindTooltip('Referencia de búsqueda',{direction:'top'}).bindPopup(`<strong>Referencia temporal</strong><br>${esc(mapSearchPreview.label||'Ubicación encontrada')}<br><small>No se guarda como sede.</small>`);
+ return searchPreviewMarker;
+}
 async function searchMapLocation(ev){
  if(ev)ev.preventDefault();
  const input=$('#mapSearchInput'),results=$('#mapSearchResults'),status=$('#mapSearchStatus'),btn=$('#mapSearchBtn');
- const q=normalizeName(input?.value);if(!q)return;
+ const q=normalizeName(input?.value);if(!q){clearMapSearchPreview({clearInput:true});return}
  if(results){results.hidden=true;results.innerHTML=''}
- if(status)status.textContent='Buscando ubicación…';if(btn)btn.disabled=true;
+ if(status)status.textContent='Buscando referencia…';if(btn)btn.disabled=true;
  try{
   const key=q.toLowerCase();let data=geocodeCache.get(key);
   if(!data){
@@ -761,17 +780,66 @@ async function searchMapLocation(ev){
    const params=new URLSearchParams({q,format:'jsonv2',limit:'5',addressdetails:'1','accept-language':'es',countrycodes:'mx',viewbox:'-111.16,29.28,-110.72,28.90'});
    const res=await fetch(`${endpoint}?${params.toString()}`,{headers:{Accept:'application/json'}});if(!res.ok)throw new Error(`HTTP ${res.status}`);data=await res.json();geocodeCache.set(key,data);
   }
-  if(!Array.isArray(data)||!data.length){if(status)status.textContent='No encontramos esa ubicación. Prueba con colonia + Hermosillo o una dirección más específica.';return}
-  if(results){results.innerHTML=data.map((r,i)=>`<button type="button" class="map-search-result" data-map-result="${i}"><strong>${esc(String(r.display_name||'').split(',').slice(0,2).join(','))}</strong><small>${esc(r.display_name||'')}</small></button>`).join('');results.hidden=false;results.querySelectorAll('[data-map-result]').forEach(b=>b.addEventListener('click',async()=>{const r=data[Number(b.dataset.mapResult)],lat=Number(r.lat),lng=Number(r.lon);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const j=getJourney();if(j){j.locationReference={lat,lng,label:r.display_name||q,updatedAt:Date.now()};await saveState(state,{immediate:true})}results.hidden=true;if(input)input.value=String(r.display_name||q).split(',').slice(0,3).join(',');if(status)status.textContent='Sede ubicada. Ya puedes trazar las rutas alrededor.';drawMap();map?.setView([lat,lng],17)}))}
+  if(!Array.isArray(data)||!data.length){if(status)status.textContent='No encontramos esa referencia. Prueba con colonia + Hermosillo o una dirección más específica.';return}
+  if(results){
+   results.innerHTML=data.map((r,i)=>`<button type="button" class="map-search-result" data-map-result="${i}"><strong>${esc(String(r.display_name||'').split(',').slice(0,2).join(','))}</strong><small>${esc(r.display_name||'')}</small></button>`).join('');
+   results.hidden=false;
+   results.querySelectorAll('[data-map-result]').forEach(b=>b.addEventListener('click',()=>{
+    const r=data[Number(b.dataset.mapResult)],lat=Number(r.lat),lng=Number(r.lon);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;
+    mapSearchPreview={lat,lng,label:r.display_name||q};
+    results.hidden=true;
+    if(input)input.value=String(r.display_name||q).split(',').slice(0,3).join(',');
+    if(status)status.textContent='Referencia temporal. Puedes moverte libremente por el mapa; esta ubicación NO se guarda como sede.';
+    // Redibujar capas sin modificar el encuadre actual y luego ir una sola vez al resultado.
+    drawMap({preserveView:true});
+    map?.setView([lat,lng],17);
+   }))
+  }
  }catch(err){console.error('No se pudo buscar la ubicación',err);if(status)status.textContent='No se pudo consultar el buscador en este momento. Puedes seguir moviendo el mapa manualmente.'}
  finally{if(btn)btn.disabled=false}
 }
 function drawVenueReference(j){
- venueMarker=null;if(!map||!j?.locationReference)return null;const lat=Number(j.locationReference.lat),lng=Number(j.locationReference.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
- venueMarker=L.circleMarker([lat,lng],{radius:9,color:'#fff',weight:3,fillColor:'#c41467',fillOpacity:1}).addTo(map).bindTooltip('Sede de la Jornada',{direction:'top',className:'venue-map-tooltip'}).bindPopup(`<strong>Sede de la Jornada</strong><br>${esc(j.locationReference.label||j.venue)}`);return venueMarker;
+ venueMarker=null;if(!map||!j?.locationReference||j.locationReference.confirmed!==true)return null;
+ const lat=Number(j.locationReference.lat),lng=Number(j.locationReference.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+ venueMarker=L.circleMarker([lat,lng],{radius:9,color:'#fff',weight:3,fillColor:'#c41467',fillOpacity:1}).addTo(map).bindTooltip('Sede confirmada de la Jornada',{direction:'top',className:'venue-map-tooltip'}).bindPopup(`<strong>Sede confirmada</strong><br>${esc(j.locationReference.label||j.venue)}`);return venueMarker;
 }
-function initMap(){if(!window.L){$('#adminMap').innerHTML='<div class="map-fallback">El mapa no pudo cargar. La administración y los formularios siguen disponibles.</div>';return}map=L.map('adminMap').setView((window.VOLANTEO_CONFIG||{}).DEFAULT_CENTER||[29.0729,-110.9559],14);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);map.on('click',e=>{if(!drawing)return;const point=[Number(e.latlng.lat),Number(e.latlng.lng)];draft=[...draft,point];clearRoadAnalysis();refreshDraft();updateGoal();updateDrawingHint()});drawMap();/* No recalculamos rutas antiguas en segundo plano: antes reutilizaba el borrador global y podía contaminar un trazado nuevo. */}
-function drawMap(){if(!map)return;map.eachLayer(l=>{if(!(l instanceof L.TileLayer))map.removeLayer(l)});draftLayer=null;draftVertexLayer=null;roadLayer=null;venueMarker=null;const j=getJourney(),e=getExercise();if(!j)return;drawVenueReference(j);if(!e){if(j.locationReference)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16);return}const visible=mapFilter==='journey'?allRoutes(j):e.routes||[];if(mapFilter==='exercise')j.exercises.filter(x=>x.id!==e.id).flatMap(x=>x.routes||[]).forEach(r=>addRouteToMap(r,.14));visible.forEach(r=>addRouteToMap(r,.82));refreshDraft();const all=[...visible.flatMap(r=>r.pts||[]),...draft];if(all.length){if(j.locationReference)all.push([Number(j.locationReference.lat),Number(j.locationReference.lng)]);map.fitBounds(all,{padding:[35,35],maxZoom:16})}else if(j.locationReference)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16)}
+function initMap(){
+ if(!window.L){$('#adminMap').innerHTML='<div class="map-fallback">El mapa no pudo cargar. La administración y los formularios siguen disponibles.</div>';return}
+ map=L.map('adminMap').setView((window.VOLANTEO_CONFIG||{}).DEFAULT_CENTER||[29.0729,-110.9559],14);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+ map.on('click',e=>{if(!drawing)return;const point=[Number(e.latlng.lat),Number(e.latlng.lng)];draft=[...draft,point];clearRoadAnalysis();refreshDraft();updateGoal();updateDrawingHint()});
+ drawMap({forceFit:true});
+ /* El paneo y zoom del usuario nunca se revierten por la sincronización periódica. */
+}
+function drawMap({forceFit=false,preserveView=false}={}){
+ if(!map)return;
+ const previousCenter=map.getCenter(),previousZoom=map.getZoom();
+ map.eachLayer(l=>{if(!(l instanceof L.TileLayer))map.removeLayer(l)});
+ draftLayer=null;draftVertexLayer=null;roadLayer=null;venueMarker=null;searchPreviewMarker=null;
+ const j=getJourney(),e=getExercise();
+ if(!j){drawMapSearchPreview();return}
+ drawVenueReference(j);
+ const contextKey=`${j.id}:${e?.id||'none'}:${mapFilter}`;
+ const contextChanged=contextKey!==mapContextKey;mapContextKey=contextKey;
+ if(e){
+  const visible=mapFilter==='journey'?allRoutes(j):e.routes||[];
+  if(mapFilter==='exercise')j.exercises.filter(x=>x.id!==e.id).flatMap(x=>x.routes||[]).forEach(r=>addRouteToMap(r,.14));
+  visible.forEach(r=>addRouteToMap(r,.82));
+  refreshDraft();
+  if(!preserveView&&(forceFit||contextChanged)){
+   const all=[...visible.flatMap(r=>r.pts||[]),...draft];
+   if(all.length)map.fitBounds(all,{padding:[35,35],maxZoom:16});
+   else if(j.locationReference?.confirmed===true)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16);
+   else if(forceFit)map.setView((window.VOLANTEO_CONFIG||{}).DEFAULT_CENTER||[29.0729,-110.9559],14);
+  }else if(preserveView&&previousCenter)map.setView(previousCenter,previousZoom,{animate:false});
+ }else{
+  if(!preserveView&&(forceFit||contextChanged)){
+   if(j.locationReference?.confirmed===true)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16);
+   else if(forceFit)map.setView((window.VOLANTEO_CONFIG||{}).DEFAULT_CENTER||[29.0729,-110.9559],14);
+  }else if(preserveView&&previousCenter)map.setView(previousCenter,previousZoom,{animate:false});
+ }
+ drawMapSearchPreview();
+}
 function refreshDraft(){if(!map)return;if(draftLayer&&map.hasLayer(draftLayer))map.removeLayer(draftLayer);if(draftVertexLayer&&map.hasLayer(draftVertexLayer))map.removeLayer(draftVertexLayer);if(roadLayer&&map.hasLayer(roadLayer))map.removeLayer(roadLayer);draftLayer=null;draftVertexLayer=null;roadLayer=null;if(draft.length){const color=nextRouteColor();const exactDraft=draft.map(p=>[Number(p[0]),Number(p[1])]);draftLayer=(mode==='volanteo'&&coverageMode==='zone'?L.polygon(exactDraft,{color,weight:5,dashArray:'10 8',fillColor:color,fillOpacity:.06,smoothFactor:0,noClip:false}):L.polyline(exactDraft,{color,weight:6,dashArray:'10 8',smoothFactor:0,noClip:false})).addTo(map);draftVertexLayer=L.layerGroup();exactDraft.forEach((p,i)=>L.circleMarker(p,{radius:7,color:'#ffffff',weight:3,fillColor:color,fillOpacity:1,pane:'markerPane'}).bindTooltip(String(i+1),{permanent:true,direction:'center',className:'draft-vertex-label'}).addTo(draftVertexLayer));draftVertexLayer.addTo(map);if(roadAnalysis?.chunks?.length)roadLayer=renderRoadSegments(roadAnalysis.chunks,color,.72,3)}}
 function hav(a,b){const R=6371,dLat=(b[0]-a[0])*Math.PI/180,dLon=(b[1]-a[1])*Math.PI/180,la1=a[0]*Math.PI/180,la2=b[0]*Math.PI/180,q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
 function draftKm(){let d=0;for(let i=1;i<draft.length;i++)d+=hav(draft[i-1],draft[i]);return d}
@@ -890,7 +958,9 @@ async function deleteJourney(id){const j=state.journeys.find(x=>x.id===(id||stat
 function bind(){
  renderMemberPicker('#memberPicker');
  $('#mapSearchForm')?.addEventListener('submit',searchMapLocation);
- $('#journeySelect').addEventListener('change',e=>{state.activeJourneyId=e.target.value||null;state.activeExerciseId=getJourney()?.exercises?.[0]?.id||null;saveState();renderJourneys()});
+ $('#mapSearchInput')?.addEventListener('input',e=>{if(!String(e.target.value||'').trim())clearMapSearchPreview()});
+ $('#mapSearchInput')?.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();clearMapSearchPreview({clearInput:true})}});
+ $('#journeySelect').addEventListener('change',e=>{state.activeJourneyId=e.target.value||null;state.activeExerciseId=getJourney()?.exercises?.[0]?.id||null;mapSearchPreview=null;mapContextKey=null;saveState();renderJourneys()});
  $('#newJourneyBtn').addEventListener('click',()=>{$('#journeyModal').hidden=false});$('#createJourneyBtn').addEventListener('click',createJourney);$('#editJourneyBtn')?.addEventListener('click',()=>openEditJourney());$('#saveEditJourneyBtn')?.addEventListener('click',saveEditJourney);$('#archiveJourneyBtn').addEventListener('click',archiveJourney);$('#deleteJourneyBtn')?.addEventListener('click',()=>deleteJourney());
  $('#manageBrigadistasBtn').addEventListener('click',()=>{renderBrigadistaManager();$('#brigadistaModal').hidden=false});
  $('#addBrigadistaBtn').addEventListener('click',addBrigadista);$('#newBrigadistaName').addEventListener('keydown',e=>{if(e.key==='Enter')addBrigadista()});$('#newBrigadistaPin')?.addEventListener('keydown',e=>{if(e.key==='Enter')addBrigadista()});

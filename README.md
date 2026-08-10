@@ -21,3 +21,7 @@ Esta actualización de gestión de difusiones no requiere ejecutar SQL adicional
 - La selección de brigadistas durante la creación de una ruta se conserva en memoria aunque el panel reciba refrescos desde Supabase. Solo se limpia al cambiar de ejercicio o al guardar la ruta.
 - El mapa administrativo incluye búsqueda manual de colonia, lugar o dirección. Al elegir un resultado, la ubicación queda guardada como referencia de la Jornada en `app_state` y se muestra en el mapa.
 - El buscador no usa autocompletado ni consultas automáticas; solo consulta cuando la persona pulsa **Buscar** o Enter. El endpoint puede cambiarse desde `assets/config.js` mediante `GEOCODER_ENDPOINT`.
+
+
+## Ajuste del buscador del mapa
+El buscador administrativo funciona únicamente como referencia temporal: seleccionar un resultado centra el mapa una sola vez, no guarda la sede ni bloquea el paneo/zoom. Al limpiar la búsqueda se elimina el marcador temporal.
