@@ -194,3 +194,15 @@ Después de esa prueba, ya puedes usar la plataforma como piloto real.
 
 ## Producción: autenticación administrativa
 El login usa un formulario nativo, mensajes de estado visibles y archivos JS con nombres nuevos para evitar caché de builds anteriores en GitHub Pages.
+
+## Gestión completa de Jornadas
+
+El panel administrativo permite crear, editar, archivar, restaurar y eliminar Jornadas del Bienestar completas.
+
+- **Editar jornada:** sede/colonia, fecha y hora. Si cambia la fecha, puede desplazar los ejercicios de difusión la misma cantidad de días sin perder rutas, equipos ni avances.
+- **Archivar:** conserva la memoria operativa en Historial.
+- **Restaurar:** devuelve una jornada archivada a la operación activa.
+- **Eliminar jornada:** borra la jornada y todos sus ejercicios/rutas. Si contiene rutas exige escribir `ELIMINAR` como confirmación adicional. En modo Supabase también limpia `route_runtime`, `route_reports` y `route_locations` de las rutas eliminadas.
+- El panel soporta quedarse temporalmente sin jornadas activas y muestra un estado vacío para registrar la siguiente sin reintroducir datos demo.
+
+Para una Jornada en martes, la creación automática genera los ejercicios habituales de lunes mañana, lunes tarde y martes mañana. Para viernes, genera miércoles tarde, jueves mañana, jueves tarde y viernes mañana.

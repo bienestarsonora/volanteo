@@ -141,7 +141,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{ou
 .strategist-hero-copy:after{content:"";position:absolute;right:-64px;top:-78px;width:230px;height:230px;border:40px solid rgba(255,255,255,.055);border-radius:50%}
 .strategist-hero-copy .eyebrow{color:#ffd7e9}.strategist-hero-copy h1{font-size:34px;line-height:1;margin:8px 0 7px;letter-spacing:-.045em}.strategist-hero-copy>p{margin:0;color:rgba(255,255,255,.78);font-size:11px;text-transform:capitalize}
 .hero-inline-context{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;position:relative;z-index:1}.hero-inline-context span{font-size:9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.11);padding:6px 9px;border-radius:999px;color:rgba(255,255,255,.84)}.hero-inline-context strong{color:#fff}
-.journey-control-card{background:#fff;border:1px solid var(--line-2);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;justify-content:center}.journey-control-card .field label{font-size:10px}.journey-control-card select{font-size:12px;padding:11px}.journey-actions-clean{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:10px}
+.journey-control-card{background:#fff;border:1px solid var(--line-2);border-radius:24px;padding:18px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;justify-content:center}.journey-control-card .field label{font-size:10px}.journey-control-card select{font-size:12px;padding:11px}.journey-actions-clean{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
 
 .strategist-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:12px}.strategist-kpi{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line-2);border-radius:16px;padding:12px 14px;box-shadow:0 8px 22px rgba(62,13,36,.035)}.strategist-kpi .kpi-icon{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:#f7eef3;color:var(--brand);font-size:14px}.strategist-kpi small{display:block;font-size:9px;color:var(--muted);font-weight:780}.strategist-kpi strong{font-size:20px;line-height:1.05;color:var(--brand-deep);display:block;margin-top:2px}.strategist-kpi.accent{background:linear-gradient(135deg,#fff 0%,#fff8fb 100%);border-color:#edd1df}
 
@@ -379,4 +379,27 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
   .field-header-actions .header-link:before{
     margin-right:4px;
   }
+}
+
+/* Gestión completa de jornadas */
+.journey-edit-option{display:flex;gap:10px;align-items:flex-start;padding:12px 13px;border:1px solid var(--line-2);border-radius:14px;background:#fafafa;margin-top:4px;cursor:pointer}
+.journey-edit-option input{margin-top:3px;accent-color:var(--brand)}
+.journey-edit-option span{display:flex;flex-direction:column;gap:3px;line-height:1.35}
+.journey-edit-option strong{font-size:12px;color:var(--text)}
+.journey-edit-option small{font-size:11px;color:var(--muted)}
+.journey-actions-clean .btn{min-width:0}
+@media (max-width:520px){.journey-actions-clean{grid-template-columns:1fr 1fr}.journey-actions-clean .btn{padding-left:9px;padding-right:9px;font-size:11px}}
+
+/* Gestión completa de Jornadas · edición y borrado seguro */
+.journey-edit-option{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px 13px;border:1px solid var(--line);border-radius:13px;background:#fffafd;cursor:pointer}
+.journey-edit-option input{margin-top:2px;accent-color:var(--brand);flex:0 0 auto}
+.journey-edit-option span{display:flex;flex-direction:column;gap:3px}
+.journey-edit-option strong{font-size:11px;color:var(--ink);line-height:1.35}
+.journey-edit-option small{font-size:9px;color:var(--muted);line-height:1.45}
+.journey-actions-clean .btn-danger{background:#fff5f7;border-color:#efcbd7;color:#9f1649}
+.journey-actions-clean .btn-danger:hover{background:#fde9ef}
+@media(max-width:560px){
+  .journey-actions-clean{grid-template-columns:1fr 1fr}
+  .journey-actions-clean .btn{min-height:42px;padding:9px 8px;font-size:9px}
+  .journey-edit-option{padding:11px}
 }

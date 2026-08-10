@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?rev=mobile-admin-access">
+  <link rel="stylesheet" href="../assets/styles.css?rev=journey-crud-real-data">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -54,7 +54,9 @@
           <div class="field"><label for="journeySelect">Jornada que estás planeando</label><select id="journeySelect"></select></div>
           <div class="journey-actions-clean">
             <button class="btn btn-primary" id="newJourneyBtn">+ Nueva jornada</button>
+            <button class="btn btn-soft" id="editJourneyBtn">Editar jornada</button>
             <button class="btn btn-soft" id="archiveJourneyBtn">Archivar</button>
+            <button class="btn btn-danger" id="deleteJourneyBtn">Eliminar jornada</button>
           </div>
         </div>
       </section>
@@ -200,6 +202,8 @@
 
 <div class="modal-backdrop" id="journeyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Planeación</div><h3>Nueva Jornada del Bienestar</h3></div><button class="icon-btn" data-close="journeyModal">×</button></div><div class="form-grid"><div class="field"><label>Sede / colonia</label><input id="newVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label>Fecha de la jornada</label><input id="newDate" type="date"></div></div><div class="field"><label>Hora de la jornada</label><input id="newTime" type="time" value="17:00"></div><div class="notice">Si la jornada es martes o viernes se generará automáticamente el calendario habitual de difusión previa. Después puedes agregar ejercicios adicionales.</div><div class="modal-actions"><button class="btn btn-soft" data-close="journeyModal">Cancelar</button><button class="btn btn-primary" id="createJourneyBtn">Crear jornada</button></div></div></div>
 
+<div class="modal-backdrop" id="editJourneyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Gestión de jornada</div><h3>Editar Jornada del Bienestar</h3></div><button class="icon-btn" data-close="editJourneyModal">×</button></div><div class="form-grid"><div class="field"><label for="editJourneyVenue">Sede / colonia</label><input id="editJourneyVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label for="editJourneyDate">Fecha de la jornada</label><input id="editJourneyDate" type="date"></div></div><div class="field"><label for="editJourneyTime">Hora de la jornada</label><input id="editJourneyTime" type="time"></div><label class="journey-edit-option"><input id="shiftJourneyExercises" type="checkbox" checked><span><strong>Ajustar también las fechas de los ejercicios de difusión</strong><small>Conserva rutas, equipos y avances, y mueve cada ejercicio la misma cantidad de días que cambie la Jornada.</small></span></label><div class="notice">Editar la Jornada no borra rutas ni seguimiento. Solo actualiza sus datos generales y, si eliges la opción anterior, las fechas de sus ejercicios.</div><div class="modal-actions"><button class="btn btn-soft" data-close="editJourneyModal">Cancelar</button><button class="btn btn-primary" id="saveEditJourneyBtn">Guardar cambios</button></div></div></div>
+
 <div class="modal-backdrop" id="brigadistaModal" hidden><div class="modal modal-wide"><div class="modal-head"><div><div class="eyebrow">Equipo operativo</div><h3>Administrar brigadistas</h3></div><button class="icon-btn" data-close="brigadistaModal">×</button></div><p class="modal-copy">Agrega, edita, activa o desactiva al personal disponible. Las participaciones históricas permanecen ligadas a las jornadas anteriores.</p><div class="brigadista-add"><div class="field"><label for="newBrigadistaName">Nombre completo</label><input id="newBrigadistaName" placeholder="Ej. Andrea Martínez"></div><div class="field"><label for="newBrigadistaPin">PIN</label><input id="newBrigadistaPin" inputmode="numeric" maxlength="6" placeholder="Ej. 4821"></div><button class="btn btn-primary" id="addBrigadistaBtn">Agregar brigadista</button></div><div class="brigadista-manager-list" id="brigadistaManagerList"></div></div></div>
 
 <div class="modal-backdrop" id="editRouteModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Gestión de rutas</div><h3>Editar ruta</h3></div><button class="icon-btn" data-close="editRouteModal">×</button></div><div class="field"><label>Nombre</label><input id="editRouteName"></div><div class="field"><label>Brigadistas asignados</label><div class="member-picker" id="editMemberPicker"></div></div><div class="modal-actions"><button class="btn btn-soft" data-close="editRouteModal">Cancelar</button><button class="btn btn-primary" id="saveEditRouteBtn">Guardar cambios</button></div></div></div>
@@ -221,10 +225,10 @@
   </div>
 </div>
 
-<script src="../assets/map-runtime.js?rev=route-delete-fix"></script>
-<script src="../assets/config.js?rev=route-delete-fix"></script>
-<script src="../assets/cloud-api.js?rev=route-delete-fix"></script>
-<script src="../assets/admin-dashboard.js?rev=route-delete-fix"></script>
-<script src="../assets/admin-login.js?rev=route-delete-fix"></script>
+<script src="../assets/map-runtime.js?rev=journey-management"></script>
+<script src="../assets/config.js?rev=journey-management"></script>
+<script src="../assets/cloud-api.js?rev=journey-management"></script>
+<script src="../assets/admin-dashboard.js?rev=journey-management"></script>
+<script src="../assets/admin-login.js?rev=journey-management"></script>
 </body>
 </html>
