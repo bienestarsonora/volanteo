@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Mi Ruta | Bienestar Sonora</title>
-  <link rel="stylesheet" href="./assets/styles.css?rev=exercise-management">
+  <link rel="stylesheet" href="./assets/styles.css?rev=multi-route-mobile-return">
 </head>
 <body class="field-body">
 <div class="field-shell">
@@ -19,11 +19,11 @@
       <article class="field-welcome">
         <div class="welcome-orb"></div>
         <div class="eyebrow light-eyebrow">Ruta del día</div>
-        <h1>Tu asignación territorial, clara desde el primer momento.</h1>
-        <p>Selecciona tu nombre y la plataforma encontrará automáticamente la Jornada del Bienestar, el ejercicio activo, tu equipo y la ruta que te corresponde.</p>
+        <h1>Tus asignaciones territoriales, claras desde el primer momento.</h1>
+        <p>Selecciona tu nombre y la plataforma encontrará automáticamente la Jornada del Bienestar, el ejercicio activo, tu equipo y las rutas que te corresponden en ese turno.</p>
         <div class="field-access-card">
           <div class="field"><label for="brigadistaSelect">Selecciona tu nombre</label><select id="brigadistaSelect"></select></div><div class="field" id="pinField"><label for="brigadistaPin">PIN de acceso</label><input id="brigadistaPin" type="password" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••"></div>
-          <button class="btn btn-light btn-block" id="enterBtn">Ver mi ruta asignada <span>→</span></button>
+          <button class="btn btn-light btn-block" id="enterBtn">Ver mis rutas asignadas <span>→</span></button>
           <small id="assignmentHint">Selecciona tu nombre e ingresa tu PIN. La app verificará tu asignación vigente.</small>
         </div>
       </article>
@@ -41,7 +41,11 @@
 
       <section class="assignment-layout">
         <article class="assignment-command">
-          <div class="assignment-label">Tu ruta de hoy</div>
+          <div class="assignment-label">Tu operación de hoy</div>
+          <div class="route-assignment-switcher" id="routeAssignmentSwitcher" hidden>
+            <div class="route-assignment-switcher-head"><strong>Tus rutas de este turno</strong><small id="routeAssignmentCount">1 ruta</small></div>
+            <div class="route-assignment-options" id="routeAssignmentOptions"></div>
+          </div>
           <div class="route-banner premium-route-banner" id="routeBanner"><span class="route-color-dot"></span><div><strong id="fieldRoute">Ruta</strong><small id="fieldMode">Volanteo territorial</small></div></div>
           <div class="assignment-meta"><div><small>Equipo</small><strong id="fieldTeam">—</strong></div><div><small>Meta</small><strong id="fieldGoal">—</strong></div><div><small>Estado</small><strong id="fieldStatus">Pendiente</strong></div></div>
           <div class="team-block"><small>Tu equipo en este ejercicio</small><div class="member-chips" id="fieldMembers"></div></div>
@@ -58,9 +62,9 @@
   </main>
   <footer class="field-footer">Dirección de Estrategias de Participación Social · Secretaría de Bienestar · Gobierno de Sonora</footer>
 </div>
-<script src="./assets/map-runtime.js"></script>
-<script src="./assets/config.js?build=prod-auth"></script>
-<script src="./assets/cloud-auth.js"></script>
-<script src="./assets/field-app.js"></script>
+<script src="./assets/map-runtime.js?rev=multi-route-mobile-return"></script>
+<script src="./assets/config.js?rev=multi-route-mobile-return"></script>
+<script src="./assets/cloud-auth.js?rev=multi-route-mobile-return"></script>
+<script src="./assets/field-app.js?rev=multi-route-mobile-return"></script>
 </body>
 </html>

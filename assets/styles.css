@@ -433,3 +433,53 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
 .map-search-result:last-child{border-bottom:0}.map-search-result:hover{background:#fff7fb}.map-search-result strong{display:block;font-size:10px}.map-search-result small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.35}
 .venue-map-tooltip{font-weight:800;color:var(--brand)}
 @media(max-width:560px){.map-search-form{grid-template-columns:auto minmax(0,1fr)}.map-search-button{grid-column:1/-1;width:100%}.map-search-results{top:94px}.map-search-meta{flex-direction:column;gap:2px}}
+
+
+/* =========================================================
+   Multi-ruta en campo + regreso móvil a brigadas
+   ========================================================= */
+.route-assignment-switcher{margin:10px 0 12px;padding:10px;border:1px solid #eadde4;border-radius:14px;background:#fffafd}
+.route-assignment-switcher-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.route-assignment-switcher-head strong{font-size:10px;color:var(--ink)}
+.route-assignment-switcher-head small{font-size:8px;color:var(--muted);font-weight:800}
+.route-assignment-options{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.route-assignment-option{appearance:none;min-width:128px;flex:1 0 128px;border:1px solid var(--line);border-radius:11px;background:#fff;padding:9px 10px;text-align:left;cursor:pointer;color:var(--ink);transition:.15s ease;box-shadow:0 2px 8px rgba(66,10,37,.03)}
+.route-assignment-option:hover{border-color:#d99ab7;background:#fff8fb}
+.route-assignment-option.active{border-color:var(--route-color,var(--brand));box-shadow:0 0 0 2px color-mix(in srgb,var(--route-color,var(--brand)) 14%, transparent);background:#fff}
+.route-assignment-option-top{display:flex;align-items:center;gap:6px}
+.route-assignment-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--route-color,var(--brand))}
+.route-assignment-option strong{font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.route-assignment-option small{display:block;margin-top:5px;font-size:8px;color:var(--muted)}
+.route-assignment-option .route-state{font-weight:850}
+.route-assignment-option.live .route-state{color:#247451}
+.route-assignment-option.done{opacity:.7}
+.route-assignment-option.done .route-state{color:#6f6970}
+
+.nav-item-field-return{margin-top:9px;border-top:1px solid rgba(255,255,255,.13);padding-top:14px!important}
+
+@media(max-width:760px){
+  .strategist-ui .header-actions > .brigade-access-link{
+    display:inline-flex!important;
+    align-items:center;
+    justify-content:center;
+    min-height:38px;
+    padding:0 11px;
+    border:1px solid #ead6e0;
+    border-radius:999px;
+    background:#fff7fb;
+    color:var(--brand-deep);
+    font-size:9px;
+    font-weight:900;
+    white-space:nowrap;
+  }
+  .strategist-ui .header-actions > .header-link:not(.header-button):not(.brigade-access-link){display:none}
+  .strategist-ui .header-actions .system-chip,
+  .strategist-ui .admin-profile{display:none}
+  .strategist-ui .header-actions{margin-left:auto}
+  .route-assignment-options{display:grid;grid-template-columns:1fr 1fr;overflow:visible}
+  .route-assignment-option{min-width:0;flex:auto}
+}
+@media(max-width:430px){
+  .route-assignment-options{grid-template-columns:1fr}
+  .strategist-ui .brigade-access-link{padding:0 9px!important}
+}

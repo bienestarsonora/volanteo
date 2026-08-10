@@ -624,7 +624,48 @@ function hav(a,b){const R=6371,dLat=(b[0]-a[0])*Math.PI/180,dLon=(b[1]-a[1])*Mat
 function draftKm(){let d=0;for(let i=1;i<draft.length;i++)d+=hav(draft[i-1],draft[i]);return d}
 function updateGoal(){const segments=Math.max(0,draft.length-1),el=$('#coverageAnalysis');if(mode==='perifoneo'){$('#goalLabel').textContent='Kilómetros programados';$('#goalValue').textContent=draftKm().toFixed(1);$('#goalUnit').textContent='km';$('#goalSelector').hidden=true;if(el){el.className='coverage-analysis';el.textContent='El perifoneo se mide por kilómetros del recorrido trazado.'}}else{$('#goalSelector').hidden=false;if(coverageMode==='zone'){const manual=manualGoalValue();$('#goalLabel').textContent=goalType==='calles'?'Calles detectadas':'Cuadras estimadas';$('#goalValue').textContent=roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):(manual||'—');$('#goalUnit').textContent=goalType}else{$('#goalLabel').textContent=goalType==='calles'?'Tramos de calle':'Cuadras del recorrido';$('#goalValue').textContent=segments;$('#goalUnit').textContent=goalType;if(el){el.className='coverage-analysis';el.textContent='En ruta lineal, cada tramo marcado se toma como una unidad de avance.'}}}}
 
-async function saveRoute(){const e=getExercise();if(!e)return;if(mode==='volanteo'&&coverageMode==='zone'&&draft.length<3)return alert('Delimita al menos tres puntos para formar una zona de cobertura.');if((mode==='perifoneo'||coverageMode==='line')&&draft.length<2)return alert('Dibuja al menos un tramo.');let manual=manualGoalValue();if(mode==='volanteo'&&coverageMode==='zone'&&!roadAnalysis&&!manual){const a=await analyzeZone(draft);manual=manualGoalValue();if(!a&&!manual)return alert('El análisis automático no respondió. Puedes reintentar o capturar una meta provisional sin volver a dibujar la zona.')}const memberIds=selectedMemberIds();if(!memberIds.length)return alert('Selecciona al menos un brigadista.');const members=memberIds.map(id=>personById(id)?.name).filter(Boolean);const goal=mode==='perifoneo'?Number(draftKm().toFixed(1)):coverageMode==='zone'?(roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):manual):Math.max(0,draft.length-1);const r={id:uid('route'),name:$('#routeName').value.trim()||`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`,type:mode,coverageMode:mode==='perifoneo'?'line':coverageMode,memberIds,members,color:nextRouteColor(),goalType:mode==='perifoneo'?'km':goalType,goal,status:'pending',progress:0,pts:draft.map(p=>[Number(p[0]),Number(p[1])]),streetSegments:roadAnalysis?(goalType==='calles'?(roadAnalysis.selectedChunks||roadAnalysis.chunks||[]):(roadAnalysis.allChunks||roadAnalysis.chunks||[])):[],streetNames:roadAnalysis?.streetNames||[],streetCount:roadAnalysis?.streetCount||null,blockCount:roadAnalysis?.blockCount||null,analysisVersion:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?5:'manual'):null,analysisSource:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?'osm':'manual'):null,completedBlocks:0,blockReports:[],trackPoints:[],createdAt:Date.now()};e.routes.push(r);drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);saveState();$('#drawNotice').className='notice success';$('#drawNotice').textContent=`${r.name} guardada con meta de ${r.type==='perifoneo'?Number(r.goal).toFixed(1)+' km':r.goal+' '+r.goalType}${r.analysisSource==='manual'?' (provisional)':''}. Ya aparece en Seguimiento.`;$('#routeName').value=`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`;renderJourneys();updateGoal()}
+async function saveRoute(){
+ const e=getExercise();if(!e)return;
+ if(mode==='volanteo'&&coverageMode==='zone'&&draft.length<3)return alert('Delimita al menos tres puntos para formar una zona de cobertura.');
+ if((mode==='perifoneo'||coverageMode==='line')&&draft.length<2)return alert('Dibuja al menos un tramo.');
+ if((mode==='perifoneo'||coverageMode==='line')&&drawing)return alert('Primero pulsa “Finalizar trazado”. Así evitamos agregar puntos por accidente mientras guardas la ruta.');
+ let manual=manualGoalValue();
+ if(mode==='volanteo'&&coverageMode==='zone'&&!roadAnalysis&&!manual){
+  const a=await analyzeZone(draft);manual=manualGoalValue();
+  if(!a&&!manual)return alert('El análisis automático no respondió. Captura una meta provisional o reintenta el análisis; la zona dibujada se conserva.');
+ }
+ const memberIds=selectedMemberIds();if(!memberIds.length)return alert('Selecciona al menos un brigadista.');
+ const members=memberIds.map(id=>personById(id)?.name).filter(Boolean);
+ const goal=mode==='perifoneo'?Number(draftKm().toFixed(1)):coverageMode==='zone'?(roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):manual):Math.max(0,draft.length-1);
+ const r={id:uid('route'),name:$('#routeName').value.trim()||`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`,type:mode,coverageMode:mode==='perifoneo'?'line':coverageMode,memberIds,members,color:nextRouteColor(),goalType:mode==='perifoneo'?'km':goalType,goal,status:'pending',progress:0,pts:draft.map(p=>[Number(p[0]),Number(p[1])]),streetSegments:roadAnalysis?(goalType==='calles'?(roadAnalysis.selectedChunks||roadAnalysis.chunks||[]):(roadAnalysis.allChunks||roadAnalysis.chunks||[])):[],streetNames:roadAnalysis?.streetNames||[],streetCount:roadAnalysis?.streetCount||null,blockCount:roadAnalysis?.blockCount||null,analysisVersion:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?5:'manual'):null,analysisSource:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?'osm':'manual'):null,completedBlocks:0,blockReports:[],trackPoints:[],createdAt:Date.now()};
+ const btn=$('#saveRouteBtn'),oldLabel=btn?.textContent||'Guardar ruta';
+ if(btn){btn.disabled=true;btn.textContent=cloudMode?'Guardando en Supabase…':'Guardando…'}
+ $('#drawNotice').className='notice';$('#drawNotice').textContent=cloudMode?'Guardando la ruta y confirmando la sincronización…':'Guardando la ruta…';
+ e.routes.push(r);
+ try{
+  // Guardado inmediato: no limpiar el dibujo ni mostrar éxito hasta que el
+  // snapshot que contiene esta ruta haya sido confirmado por Supabase.
+  await saveState(state,{immediate:true});
+ }catch(err){
+  console.error('No se pudo confirmar el guardado de la ruta',err);
+  // Revierte solo la inserción de esta ruta; el trazado y las selecciones
+  // permanecen intactos para que el usuario pueda reintentar sin redibujar.
+  e.routes=e.routes.filter(x=>x.id!==r.id);
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(_e){}
+  setCloudStatus('Error al guardar',false);
+  $('#drawNotice').className='notice error';
+  $('#drawNotice').textContent=`No se pudo guardar la ruta en Supabase: ${err?.message||'error de conexión'}. El trazado sigue aquí; vuelve a pulsar Guardar ruta.`;
+  if(btn){btn.disabled=false;btn.textContent=oldLabel}
+  renderJourneyRoutes();renderTracking();renderSideRoutes?.();
+  return;
+ }
+ routeMemberDraftIds=[];routeMemberDraftExerciseId=e.id;drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);
+ $('#drawNotice').className='notice success';
+ $('#drawNotice').textContent=`✓ ${r.name} guardada y sincronizada${r.type==='perifoneo'?` · ${Number(r.goal).toFixed(1)} km`:` · ${r.goal} ${r.goalType}`}${r.analysisSource==='manual'?' · meta provisional':''}.`;
+ $('#routeName').value=`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`;
+ renderJourneys();updateGoal();
+ if(btn){btn.disabled=false;btn.textContent='Guardar ruta'}
+}
 async function refreshLegacyZoneGoals(){const e=getExercise();if(!e)return;const list=(e.routes||[]).filter(r=>r.type==='volanteo'&&r.coverageMode==='zone'&&Number(r.analysisVersion||0)<5&&r.pts?.length>=3);for(const r of list.slice(0,4)){const prevMode=mode,prevCoverage=coverageMode,prevGoal=goalType,prevDraft=draft,prevAnalysis=roadAnalysis;mode='volanteo';coverageMode='zone';goalType=r.goalType||'calles';draft=[...r.pts];const a=await analyzeZone(draft,{silent:true});if(a){r.streetSegments=a.chunks;r.streetNames=a.streetNames;r.streetCount=a.streetCount;r.blockCount=a.blockCount;r.goal=r.goalType==='cuadras'?a.blockCount:a.streetCount;r.analysisVersion=5;r.analysisSource='osm-v29';if(r.status==='live'&&r.goal)r.progress=Math.min(100,Math.round((r.completedUnits||0)/r.goal*100))}mode=prevMode;coverageMode=prevCoverage;goalType=prevGoal;draft=prevDraft;roadAnalysis=prevAnalysis}if(list.length){saveState();renderJourneys();clearRoadAnalysis();updateGoal()}}
 function deleteRoute(id){if(!confirm('¿Borrar esta ruta? Esta acción no afecta las demás rutas del ejercicio.'))return;const e=getExercise();e.routes=e.routes.filter(r=>r.id!==id);saveState();renderJourneys()}
 function duplicateRoute(id){const e=getExercise(),r=e.routes.find(x=>x.id===id);if(!r)return;const copy=JSON.parse(JSON.stringify(r));copy.id=uid('route');copy.name=r.name+' copia';copy.color=nextRouteColor();copy.status='pending';copy.progress=0;copy.completedUnits=0;copy.completedBlocks=0;copy.blockReports=[];copy.trackPoints=[];copy.lastPosition=null;copy.lastPositionAt=null;copy.lastProgressAt=null;delete copy.startedAt;delete copy.finishedAt;e.routes.push(copy);saveState();renderJourneys()}
@@ -665,7 +706,14 @@ async function cloudRefresh(){
   cloudApplying=true;const remote=await window.VolanteoCloud.adminLoadState();
   if(remote){state=migrateState(remote);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderJourneys()}
   setCloudStatus('En línea',true);
- }catch(err){console.error('Error de sincronización Supabase',err);setCloudStatus('Sin conexión',false)}finally{cloudApplying=false}
+ }catch(err){console.error('Error de sincronización Supabase',err);setCloudStatus('Sin conexión',false)}finally{
+  cloudApplying=false;
+  // Si el usuario editó algo mientras esta lectura estaba en curso, esa
+  // escritura tiene prioridad y se envía inmediatamente antes del siguiente poll.
+  if(cloudPendingWrite&&!cloudSaveInFlight&&!cloudSaveTimer){
+   cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave().catch(()=>{})},0);
+  }
+ }
 }
 function refreshRealtimeFromSharedState(){
  if(cloudMode){cloudRefresh();return}

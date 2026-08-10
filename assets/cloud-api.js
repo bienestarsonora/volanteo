@@ -130,11 +130,26 @@
 
   async function fieldListBrigadistas(){return (await rpc('field_list_brigadistas',{},false))||[]}
   async function fieldGetAssignment(brigadistaId,pin){return rpc('field_get_assignment',{p_brigadista_id:brigadistaId,p_pin:String(pin||'')},false)}
+  async function fieldGetAssignments(brigadistaId,pin){
+    const args={p_brigadista_id:brigadistaId,p_pin:String(pin||'')};
+    try{
+      const data=await rpc('field_get_assignments',args,false);
+      if(Array.isArray(data?.assignments))return data;
+      if(Array.isArray(data))return {assignments:data};
+      return {assignments:[]};
+    }catch(err){
+      const msg=String(err?.message||'');
+      const missing=err?.status===404||/field_get_assignments|PGRST202|schema cache|Could not find the function/i.test(msg);
+      if(!missing)throw err;
+      const one=await fieldGetAssignment(brigadistaId,pin);
+      return {assignments:one?.route?[one]:[],legacy:true};
+    }
+  }
   async function fieldStart(brigadistaId,pin,routeId){return rpc('field_start_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
   async function fieldReportBlock(brigadistaId,pin,routeId,position){return rpc('field_report_block',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position?.lat??null,p_lng:position?.lng??null},false)}
   async function fieldReportProgress(brigadistaId,pin,routeId){return rpc('field_report_progress',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
   async function fieldLocation(brigadistaId,pin,routeId,position){return rpc('field_update_location',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId,p_lat:position.lat,p_lng:position.lng,p_accuracy_m:position.accuracy??null},false)}
   async function fieldFinish(brigadistaId,pin,routeId){return rpc('field_finish_route',{p_brigadista_id:brigadistaId,p_pin:String(pin||''),p_route_id:routeId},false)}
 
-  window.VolanteoCloud={enabled,init,getSession,adminSignIn,adminSignOut,isAdmin,adminLoadState,adminSaveState,adminDeleteRouteData,subscribeAdmin,fieldListBrigadistas,fieldGetAssignment,fieldStart,fieldReportBlock,fieldReportProgress,fieldLocation,fieldFinish};
+  window.VolanteoCloud={enabled,init,getSession,adminSignIn,adminSignOut,isAdmin,adminLoadState,adminSaveState,adminDeleteRouteData,subscribeAdmin,fieldListBrigadistas,fieldGetAssignment,fieldGetAssignments,fieldStart,fieldReportBlock,fieldReportProgress,fieldLocation,fieldFinish};
 })();
