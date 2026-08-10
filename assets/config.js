@@ -13,5 +13,6 @@ window.VOLANTEO_CONFIG={
     'https://overpass.private.coffee/api/interpreter',
     'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
   ],
-  OVERPASS_TIMEOUT_MS:12000
+  OVERPASS_TIMEOUT_MS:12000,
+  GEOCODER_ENDPOINT:'https://nominatim.openstreetmap.org/search'
 };

@@ -418,3 +418,18 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
  .exercise-action{min-height:30px;padding:7px 10px;font-size:9px;flex:1}
  .compact-timeline .exercise-card{min-width:195px}
 }
+
+/* Buscador de ubicación de la Jornada */
+.map-location-search{position:relative;padding:10px 12px;border-bottom:1px solid var(--line-2);background:#fff}
+.map-search-form{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;border:1px solid var(--line);border-radius:13px;padding:5px 6px 5px 10px;background:#fcfafb;transition:.16s ease}
+.map-search-form:focus-within{border-color:#ce8cad;box-shadow:0 0 0 3px rgba(192,20,103,.08);background:#fff}
+.map-search-icon{font-size:18px;color:var(--brand);line-height:1}
+.map-search-form input{border:0;outline:0;background:transparent;min-width:0;padding:7px 2px;font:inherit;color:var(--ink)}
+.map-search-form input::placeholder{color:#9a8b93}
+.map-search-button{padding:8px 14px;font-size:9px}
+.map-search-meta{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:8px;color:var(--muted)}
+.map-search-results{position:absolute;z-index:1200;left:12px;right:12px;top:58px;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:0 18px 40px rgba(53,13,31,.16);overflow:hidden;max-height:230px;overflow-y:auto}
+.map-search-result{width:100%;border:0;border-bottom:1px solid var(--line-2);background:#fff;text-align:left;padding:10px 12px;cursor:pointer;color:var(--ink)}
+.map-search-result:last-child{border-bottom:0}.map-search-result:hover{background:#fff7fb}.map-search-result strong{display:block;font-size:10px}.map-search-result small{display:block;margin-top:3px;color:var(--muted);font-size:8px;line-height:1.35}
+.venue-map-tooltip{font-weight:800;color:var(--brand)}
+@media(max-width:560px){.map-search-form{grid-template-columns:auto minmax(0,1fr)}.map-search-button{grid-column:1/-1;width:100%}.map-search-results{top:94px}.map-search-meta{flex-direction:column;gap:2px}}

@@ -7,7 +7,10 @@ const liveChannel=('BroadcastChannel' in window)?new BroadcastChannel(LIVE_CHANN
 const cloudMode=Boolean(window.VolanteoCloud?.enabled);
 let adminReady=false,cloudSaveTimer=null,cloudApplying=false,cloudSubscription=null;
 let cloudSaveInFlight=null,cloudPendingWrite=null,cloudSaveSeq=0,cloudLastMutationAt=0;
-let map=null,draftLayer=null,draftVertexLayer=null,roadLayer=null,drawing=false,draft=[],mode='volanteo',coverageMode='zone',goalType='calles',mapFilter='exercise',editingRouteId=null,roadAnalysis=null,manualGoalOverride=null,drawSessionId=0,analysisRunId=0,lastAcceptedAnalysis=null,lastAcceptedPolygonKey='';
+let map=null,draftLayer=null,draftVertexLayer=null,roadLayer=null,venueMarker=null,drawing=false,draft=[],mode='volanteo',coverageMode='zone',goalType='calles',mapFilter='exercise',editingRouteId=null,roadAnalysis=null,manualGoalOverride=null,drawSessionId=0,analysisRunId=0,lastAcceptedAnalysis=null,lastAcceptedPolygonKey='';
+let routeMemberDraftIds=[],routeMemberDraftExerciseId=null;
+let geocodeLastRequestAt=0;
+const geocodeCache=new Map();
 
 function isoDate(d){return d.toISOString().slice(0,10)}
 function addDays(dateStr,n){const d=new Date(dateStr+'T12:00:00');d.setDate(d.getDate()+n);return isoDate(d)}
@@ -16,6 +19,7 @@ function fmtShort(dateStr){if(!dateStr)return '';return new Intl.DateTimeFormat(
 function initials(n){return String(n||'').split(' ').filter(Boolean).map(x=>x[0]).slice(0,2).join('').toUpperCase()}
 function uid(prefix){return prefix+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7)}
 function normalizeName(n){return String(n||'').trim().replace(/\s+/g,' ')}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function makeRoster(names=DEFAULT_PEOPLE){return names.map((name,i)=>({id:`person-${i+1}`,name,active:true,pin:'1234',createdAt:Date.now()+i}))}
 
 function buildExercises(journeyDate){
@@ -279,13 +283,30 @@ function renderMapLegend(){
  const legend=$('#mapLegend');if(!legend)return;const j=getJourney(),e=getExercise();if(!j)return;if(!e){legend.innerHTML='<strong>Rutas del ejercicio</strong><div class="legend-items">Agrega una difusión para comenzar</div>';return}const routes=mapFilter==='journey'?allRoutes(j):(e.routes||[]);legend.innerHTML=`<strong>${mapFilter==='journey'?'Rutas de la jornada':'Rutas del ejercicio'}</strong><div class="legend-items">${routes.length?routes.map(r=>`<div class="legend-row"><i style="background:${r.color}"></i><span>${r.name}</span></div>`).join(''):'Sin rutas guardadas'}</div>`;
 }
 
-function renderMemberPicker(containerId,selectedIds=[]){
+function syncRouteMemberDraftContext(){
+ const exerciseId=getExercise()?.id||null;
+ if(routeMemberDraftExerciseId!==exerciseId){
+  routeMemberDraftExerciseId=exerciseId;
+  routeMemberDraftIds=[];
+ }
+ // Si alguien fue eliminado del catálogo mientras la ruta estaba en borrador, quítalo.
+ routeMemberDraftIds=routeMemberDraftIds.filter(id=>Boolean(personById(id)));
+}
+function renderMemberPicker(containerId,selectedIds){
  const el=$(containerId);if(!el)return;
+ const isComposer=containerId==='#memberPicker';
+ if(isComposer){
+  syncRouteMemberDraftContext();
+  if(!Array.isArray(selectedIds))selectedIds=[...routeMemberDraftIds];
+ }else if(!Array.isArray(selectedIds))selectedIds=[];
  const selectedPeople=selectedIds.map(personById).filter(Boolean);
  const pool=[...activeRoster()];
  for(const p of selectedPeople)if(!pool.some(x=>x.id===p.id))pool.push(p);
  el.innerHTML=pool.map(p=>`<label class="member-option ${selectedIds.includes(p.id)?'selected':''} ${p.active?'':'inactive-option'}"><input type="checkbox" value="${p.id}" ${selectedIds.includes(p.id)?'checked':''}><span class="avatar">${initials(p.name)}</span><span>${p.name}${p.active?'':' <small>(inactivo)</small>'}</span></label>`).join('') || '<div class="notice">No hay brigadistas activos. Administra el catálogo antes de asignar una ruta.</div>';
- el.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>i.closest('.member-option').classList.toggle('selected',i.checked)));
+ el.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>{
+  i.closest('.member-option').classList.toggle('selected',i.checked);
+  if(isComposer)routeMemberDraftIds=selectedMemberIds(containerId);
+ }));
 }
 function selectedMemberIds(containerId='#memberPicker'){return [...document.querySelectorAll(`${containerId} input:checked`)].map(i=>i.value)}
 
@@ -724,14 +745,39 @@ function clearRoadAnalysis(){
 }
 function renderRoadSegments(segments,color,opacity=.55,weight=3){if(!map||!segments?.length)return null;const group=L.layerGroup();segments.forEach(seg=>L.polyline(seg,{color,weight,opacity,className:'street-analysis-line'}).addTo(group));group.addTo(map);return group}
 function addRouteToMap(r,opacity=.82){if(!map||!r.pts?.length)return;if(r.type==='volanteo'&&r.coverageMode==='zone'){L.polygon(r.pts,{color:r.color,weight:4,opacity,fillColor:r.color,fillOpacity:.05*opacity}).addTo(map).bindTooltip(`${r.name} · ${routeMemberNames(r).join(', ')||'Sin equipo'}`);if(r.streetSegments?.length)renderRoadSegments(r.streetSegments,r.color,Math.min(.8,opacity),3);(r.blockReports||[]).filter(x=>Number.isFinite(Number(x.lat))&&Number.isFinite(Number(x.lng))).forEach(rep=>L.circleMarker([Number(rep.lat),Number(rep.lng)],{radius:5,color:'#fff',weight:2,fillColor:'#239b73',fillOpacity:1}).addTo(map).bindTooltip(`Cuadra ${rep.number} reportada`))}else L.polyline(r.pts,{color:r.color,weight:6,opacity}).addTo(map).bindTooltip(`${r.name} · ${routeMemberNames(r).join(', ')||'Sin equipo'}`);if(r.status==='live'&&r.lastPosition&&Number.isFinite(Number(r.lastPosition.lat))&&Number.isFinite(Number(r.lastPosition.lng)))L.circleMarker([Number(r.lastPosition.lat),Number(r.lastPosition.lng)],{radius:8,color:'#fff',weight:3,fillColor:r.color,fillOpacity:1}).addTo(map).bindTooltip(`${r.name} · ubicación en vivo`)}
+
+async function searchMapLocation(ev){
+ if(ev)ev.preventDefault();
+ const input=$('#mapSearchInput'),results=$('#mapSearchResults'),status=$('#mapSearchStatus'),btn=$('#mapSearchBtn');
+ const q=normalizeName(input?.value);if(!q)return;
+ if(results){results.hidden=true;results.innerHTML=''}
+ if(status)status.textContent='Buscando ubicación…';if(btn)btn.disabled=true;
+ try{
+  const key=q.toLowerCase();let data=geocodeCache.get(key);
+  if(!data){
+   const wait=Math.max(0,1100-(Date.now()-geocodeLastRequestAt));if(wait)await new Promise(r=>setTimeout(r,wait));
+   geocodeLastRequestAt=Date.now();
+   const cfg=window.VOLANTEO_CONFIG||{},endpoint=cfg.GEOCODER_ENDPOINT||'https://nominatim.openstreetmap.org/search';
+   const params=new URLSearchParams({q,format:'jsonv2',limit:'5',addressdetails:'1','accept-language':'es',countrycodes:'mx',viewbox:'-111.16,29.28,-110.72,28.90'});
+   const res=await fetch(`${endpoint}?${params.toString()}`,{headers:{Accept:'application/json'}});if(!res.ok)throw new Error(`HTTP ${res.status}`);data=await res.json();geocodeCache.set(key,data);
+  }
+  if(!Array.isArray(data)||!data.length){if(status)status.textContent='No encontramos esa ubicación. Prueba con colonia + Hermosillo o una dirección más específica.';return}
+  if(results){results.innerHTML=data.map((r,i)=>`<button type="button" class="map-search-result" data-map-result="${i}"><strong>${esc(String(r.display_name||'').split(',').slice(0,2).join(','))}</strong><small>${esc(r.display_name||'')}</small></button>`).join('');results.hidden=false;results.querySelectorAll('[data-map-result]').forEach(b=>b.addEventListener('click',async()=>{const r=data[Number(b.dataset.mapResult)],lat=Number(r.lat),lng=Number(r.lon);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const j=getJourney();if(j){j.locationReference={lat,lng,label:r.display_name||q,updatedAt:Date.now()};await saveState(state,{immediate:true})}results.hidden=true;if(input)input.value=String(r.display_name||q).split(',').slice(0,3).join(',');if(status)status.textContent='Sede ubicada. Ya puedes trazar las rutas alrededor.';drawMap();map?.setView([lat,lng],17)}))}
+ }catch(err){console.error('No se pudo buscar la ubicación',err);if(status)status.textContent='No se pudo consultar el buscador en este momento. Puedes seguir moviendo el mapa manualmente.'}
+ finally{if(btn)btn.disabled=false}
+}
+function drawVenueReference(j){
+ venueMarker=null;if(!map||!j?.locationReference)return null;const lat=Number(j.locationReference.lat),lng=Number(j.locationReference.lng);if(!Number.isFinite(lat)||!Number.isFinite(lng))return null;
+ venueMarker=L.circleMarker([lat,lng],{radius:9,color:'#fff',weight:3,fillColor:'#c41467',fillOpacity:1}).addTo(map).bindTooltip('Sede de la Jornada',{direction:'top',className:'venue-map-tooltip'}).bindPopup(`<strong>Sede de la Jornada</strong><br>${esc(j.locationReference.label||j.venue)}`);return venueMarker;
+}
 function initMap(){if(!window.L){$('#adminMap').innerHTML='<div class="map-fallback">El mapa no pudo cargar. La administración y los formularios siguen disponibles.</div>';return}map=L.map('adminMap').setView((window.VOLANTEO_CONFIG||{}).DEFAULT_CENTER||[29.0729,-110.9559],14);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);map.on('click',e=>{if(!drawing)return;const point=[Number(e.latlng.lat),Number(e.latlng.lng)];draft=[...draft,point];clearRoadAnalysis();refreshDraft();updateGoal();updateDrawingHint()});drawMap();/* No recalculamos rutas antiguas en segundo plano: antes reutilizaba el borrador global y podía contaminar un trazado nuevo. */}
-function drawMap(){if(!map)return;map.eachLayer(l=>{if(!(l instanceof L.TileLayer))map.removeLayer(l)});draftLayer=null;draftVertexLayer=null;roadLayer=null;const j=getJourney(),e=getExercise();if(!j||!e)return;const visible=mapFilter==='journey'?allRoutes(j):e.routes||[];if(mapFilter==='exercise')j.exercises.filter(x=>x.id!==e.id).flatMap(x=>x.routes||[]).forEach(r=>addRouteToMap(r,.14));visible.forEach(r=>addRouteToMap(r,.82));refreshDraft();const all=[...visible.flatMap(r=>r.pts||[]),...draft];if(all.length)map.fitBounds(all,{padding:[35,35],maxZoom:16})}
+function drawMap(){if(!map)return;map.eachLayer(l=>{if(!(l instanceof L.TileLayer))map.removeLayer(l)});draftLayer=null;draftVertexLayer=null;roadLayer=null;venueMarker=null;const j=getJourney(),e=getExercise();if(!j)return;drawVenueReference(j);if(!e){if(j.locationReference)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16);return}const visible=mapFilter==='journey'?allRoutes(j):e.routes||[];if(mapFilter==='exercise')j.exercises.filter(x=>x.id!==e.id).flatMap(x=>x.routes||[]).forEach(r=>addRouteToMap(r,.14));visible.forEach(r=>addRouteToMap(r,.82));refreshDraft();const all=[...visible.flatMap(r=>r.pts||[]),...draft];if(all.length){if(j.locationReference)all.push([Number(j.locationReference.lat),Number(j.locationReference.lng)]);map.fitBounds(all,{padding:[35,35],maxZoom:16})}else if(j.locationReference)map.setView([Number(j.locationReference.lat),Number(j.locationReference.lng)],16)}
 function refreshDraft(){if(!map)return;if(draftLayer&&map.hasLayer(draftLayer))map.removeLayer(draftLayer);if(draftVertexLayer&&map.hasLayer(draftVertexLayer))map.removeLayer(draftVertexLayer);if(roadLayer&&map.hasLayer(roadLayer))map.removeLayer(roadLayer);draftLayer=null;draftVertexLayer=null;roadLayer=null;if(draft.length){const color=nextRouteColor();const exactDraft=draft.map(p=>[Number(p[0]),Number(p[1])]);draftLayer=(mode==='volanteo'&&coverageMode==='zone'?L.polygon(exactDraft,{color,weight:5,dashArray:'10 8',fillColor:color,fillOpacity:.06,smoothFactor:0,noClip:false}):L.polyline(exactDraft,{color,weight:6,dashArray:'10 8',smoothFactor:0,noClip:false})).addTo(map);draftVertexLayer=L.layerGroup();exactDraft.forEach((p,i)=>L.circleMarker(p,{radius:7,color:'#ffffff',weight:3,fillColor:color,fillOpacity:1,pane:'markerPane'}).bindTooltip(String(i+1),{permanent:true,direction:'center',className:'draft-vertex-label'}).addTo(draftVertexLayer));draftVertexLayer.addTo(map);if(roadAnalysis?.chunks?.length)roadLayer=renderRoadSegments(roadAnalysis.chunks,color,.72,3)}}
 function hav(a,b){const R=6371,dLat=(b[0]-a[0])*Math.PI/180,dLon=(b[1]-a[1])*Math.PI/180,la1=a[0]*Math.PI/180,la2=b[0]*Math.PI/180,q=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))}
 function draftKm(){let d=0;for(let i=1;i<draft.length;i++)d+=hav(draft[i-1],draft[i]);return d}
 function updateGoal(){const segments=Math.max(0,draft.length-1),el=$('#coverageAnalysis');if(mode==='perifoneo'){$('#goalLabel').textContent='Kilómetros programados';$('#goalValue').textContent=draftKm().toFixed(1);$('#goalUnit').textContent='km';$('#goalSelector').hidden=true;if(el){el.className='coverage-analysis';el.textContent='El perifoneo se mide por kilómetros del recorrido trazado.'}}else{$('#goalSelector').hidden=false;if(coverageMode==='zone'){const manual=manualGoalValue();$('#goalLabel').textContent=goalType==='calles'?'Calles detectadas':'Cuadras estimadas';$('#goalValue').textContent=roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):(manual||'—');$('#goalUnit').textContent=goalType}else{$('#goalLabel').textContent=goalType==='calles'?'Tramos de calle':'Cuadras del recorrido';$('#goalValue').textContent=segments;$('#goalUnit').textContent=goalType;if(el){el.className='coverage-analysis';el.textContent='En ruta lineal, cada tramo marcado se toma como una unidad de avance.'}}}}
 
-async function saveRoute(){const e=getExercise();if(!e)return;if(mode==='volanteo'&&coverageMode==='zone'&&draft.length<3)return alert('Delimita al menos tres puntos para formar una zona de cobertura.');if((mode==='perifoneo'||coverageMode==='line')&&draft.length<2)return alert('Dibuja al menos un tramo.');let manual=manualGoalValue();if(mode==='volanteo'&&coverageMode==='zone'&&!roadAnalysis&&!manual){const a=await analyzeZone(draft);manual=manualGoalValue();if(!a&&!manual)return alert('El análisis automático no respondió. Puedes reintentar o capturar una meta provisional sin volver a dibujar la zona.')}const memberIds=selectedMemberIds();if(!memberIds.length)return alert('Selecciona al menos un brigadista.');const members=memberIds.map(id=>personById(id)?.name).filter(Boolean);const goal=mode==='perifoneo'?Number(draftKm().toFixed(1)):coverageMode==='zone'?(roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):manual):Math.max(0,draft.length-1);const r={id:uid('route'),name:$('#routeName').value.trim()||`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`,type:mode,coverageMode:mode==='perifoneo'?'line':coverageMode,memberIds,members,color:nextRouteColor(),goalType:mode==='perifoneo'?'km':goalType,goal,status:'pending',progress:0,pts:draft.map(p=>[Number(p[0]),Number(p[1])]),streetSegments:roadAnalysis?(goalType==='calles'?(roadAnalysis.selectedChunks||roadAnalysis.chunks||[]):(roadAnalysis.allChunks||roadAnalysis.chunks||[])):[],streetNames:roadAnalysis?.streetNames||[],streetCount:roadAnalysis?.streetCount||null,blockCount:roadAnalysis?.blockCount||null,analysisVersion:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?5:'manual'):null,analysisSource:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?'osm':'manual'):null,completedBlocks:0,blockReports:[],trackPoints:[],createdAt:Date.now()};e.routes.push(r);drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);saveState();$('#drawNotice').className='notice success';$('#drawNotice').textContent=`${r.name} guardada con meta de ${r.type==='perifoneo'?Number(r.goal).toFixed(1)+' km':r.goal+' '+r.goalType}${r.analysisSource==='manual'?' (provisional)':''}. Ya aparece en Seguimiento.`;$('#routeName').value=`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`;renderJourneys();updateGoal()}
+async function saveRoute(){const e=getExercise();if(!e)return;if(mode==='volanteo'&&coverageMode==='zone'&&draft.length<3)return alert('Delimita al menos tres puntos para formar una zona de cobertura.');if((mode==='perifoneo'||coverageMode==='line')&&draft.length<2)return alert('Dibuja al menos un tramo.');let manual=manualGoalValue();if(mode==='volanteo'&&coverageMode==='zone'&&!roadAnalysis&&!manual){const a=await analyzeZone(draft);manual=manualGoalValue();if(!a&&!manual)return alert('El análisis automático no respondió. Puedes reintentar o capturar una meta provisional sin volver a dibujar la zona.')}const memberIds=selectedMemberIds();if(!memberIds.length)return alert('Selecciona al menos un brigadista.');const members=memberIds.map(id=>personById(id)?.name).filter(Boolean);const goal=mode==='perifoneo'?Number(draftKm().toFixed(1)):coverageMode==='zone'?(roadAnalysis?(goalType==='calles'?roadAnalysis.streetCount:roadAnalysis.blockCount):manual):Math.max(0,draft.length-1);const r={id:uid('route'),name:$('#routeName').value.trim()||`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`,type:mode,coverageMode:mode==='perifoneo'?'line':coverageMode,memberIds,members,color:nextRouteColor(),goalType:mode==='perifoneo'?'km':goalType,goal,status:'pending',progress:0,pts:draft.map(p=>[Number(p[0]),Number(p[1])]),streetSegments:roadAnalysis?(goalType==='calles'?(roadAnalysis.selectedChunks||roadAnalysis.chunks||[]):(roadAnalysis.allChunks||roadAnalysis.chunks||[])):[],streetNames:roadAnalysis?.streetNames||[],streetCount:roadAnalysis?.streetCount||null,blockCount:roadAnalysis?.blockCount||null,analysisVersion:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?5:'manual'):null,analysisSource:mode==='volanteo'&&coverageMode==='zone'?(roadAnalysis?'osm':'manual'):null,completedBlocks:0,blockReports:[],trackPoints:[],createdAt:Date.now()};e.routes.push(r);routeMemberDraftIds=[];routeMemberDraftExerciseId=e.id;drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);saveState();$('#drawNotice').className='notice success';$('#drawNotice').textContent=`${r.name} guardada con meta de ${r.type==='perifoneo'?Number(r.goal).toFixed(1)+' km':r.goal+' '+r.goalType}${r.analysisSource==='manual'?' (provisional)':''}. Ya aparece en Seguimiento.`;$('#routeName').value=`Ruta ${(e.routes.length+1).toString().padStart(2,'0')}`;renderJourneys();updateGoal()}
 async function refreshLegacyZoneGoals(){const e=getExercise();if(!e)return;const list=(e.routes||[]).filter(r=>r.type==='volanteo'&&r.coverageMode==='zone'&&Number(r.analysisVersion||0)<5&&r.pts?.length>=3);for(const r of list.slice(0,4)){const prevMode=mode,prevCoverage=coverageMode,prevGoal=goalType,prevDraft=draft,prevAnalysis=roadAnalysis;mode='volanteo';coverageMode='zone';goalType=r.goalType||'calles';draft=[...r.pts];const a=await analyzeZone(draft,{silent:true});if(a){r.streetSegments=a.chunks;r.streetNames=a.streetNames;r.streetCount=a.streetCount;r.blockCount=a.blockCount;r.goal=r.goalType==='cuadras'?a.blockCount:a.streetCount;r.analysisVersion=5;r.analysisSource='osm-v29';if(r.status==='live'&&r.goal)r.progress=Math.min(100,Math.round((r.completedUnits||0)/r.goal*100))}mode=prevMode;coverageMode=prevCoverage;goalType=prevGoal;draft=prevDraft;roadAnalysis=prevAnalysis}if(list.length){saveState();renderJourneys();clearRoadAnalysis();updateGoal()}}
 async function deleteRoute(id){
  if(!confirm('¿Borrar esta ruta? Se eliminará del operativo y del seguimiento.'))return;
@@ -843,6 +889,7 @@ async function deleteJourney(id){const j=state.journeys.find(x=>x.id===(id||stat
 
 function bind(){
  renderMemberPicker('#memberPicker');
+ $('#mapSearchForm')?.addEventListener('submit',searchMapLocation);
  $('#journeySelect').addEventListener('change',e=>{state.activeJourneyId=e.target.value||null;state.activeExerciseId=getJourney()?.exercises?.[0]?.id||null;saveState();renderJourneys()});
  $('#newJourneyBtn').addEventListener('click',()=>{$('#journeyModal').hidden=false});$('#createJourneyBtn').addEventListener('click',createJourney);$('#editJourneyBtn')?.addEventListener('click',()=>openEditJourney());$('#saveEditJourneyBtn')?.addEventListener('click',saveEditJourney);$('#archiveJourneyBtn').addEventListener('click',archiveJourney);$('#deleteJourneyBtn')?.addEventListener('click',()=>deleteJourney());
  $('#manageBrigadistasBtn').addEventListener('click',()=>{renderBrigadistaManager();$('#brigadistaModal').hidden=false});

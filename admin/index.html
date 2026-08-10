@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?rev=exercise-management">
+  <link rel="stylesheet" href="../assets/styles.css?rev=route-team-map-search">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -93,6 +93,15 @@
                 <small id="mapDrawHint">Configura la ruta a la derecha y pulsa “Trazar en el mapa”.</small>
               </div>
               <div class="segmented"><button class="seg-btn active" data-mapfilter="exercise">Este ejercicio</button><button class="seg-btn" data-mapfilter="journey">Toda la jornada</button></div>
+            </div>
+            <div class="map-location-search">
+              <form id="mapSearchForm" class="map-search-form" role="search">
+                <span class="map-search-icon" aria-hidden="true">⌕</span>
+                <input id="mapSearchInput" type="search" autocomplete="off" placeholder="Buscar colonia, lugar o dirección en Hermosillo" aria-label="Buscar ubicación en el mapa">
+                <button class="btn btn-soft map-search-button" id="mapSearchBtn" type="submit">Buscar</button>
+              </form>
+              <div class="map-search-results" id="mapSearchResults" hidden></div>
+              <div class="map-search-meta"><span id="mapSearchStatus">Ubica la sede de la Jornada y después traza las rutas alrededor.</span><span>© OpenStreetMap contributors</span></div>
             </div>
             <div class="map-wrap strategist-map-wrap">
               <div id="adminMap" class="map strategist-map"><div class="map-fallback">Cargando mapa…</div></div>
@@ -227,10 +236,10 @@
   </div>
 </div>
 
-<script src="../assets/map-runtime.js?rev=exercise-management"></script>
-<script src="../assets/config.js?rev=exercise-management"></script>
-<script src="../assets/cloud-api.js?rev=exercise-management"></script>
-<script src="../assets/admin-dashboard.js?rev=exercise-management"></script>
-<script src="../assets/admin-login.js?rev=exercise-management"></script>
+<script src="../assets/map-runtime.js?rev=route-team-map-search"></script>
+<script src="../assets/config.js?rev=route-team-map-search"></script>
+<script src="../assets/cloud-api.js?rev=route-team-map-search"></script>
+<script src="../assets/admin-dashboard.js?rev=route-team-map-search"></script>
+<script src="../assets/admin-login.js?rev=route-team-map-search"></script>
 </body>
 </html>
