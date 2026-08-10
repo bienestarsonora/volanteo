@@ -403,3 +403,18 @@ body.route-planning-active .draw-mode-badge{display:inline-flex}.route-planning-
   .journey-actions-clean .btn{min-height:42px;padding:9px 8px;font-size:9px}
   .journey-edit-option{padding:11px}
 }
+
+/* Gestión directa de difusiones */
+.exercise-card-actions{display:flex;gap:6px;margin-top:9px;padding-top:8px;border-top:1px solid var(--line-2)}
+.exercise-action{appearance:none;border:1px solid #ead3de;background:#fff;color:#6d2143;border-radius:8px;padding:5px 8px;font:inherit;font-size:8px;font-weight:850;cursor:pointer;line-height:1;transition:.16s ease}
+.exercise-action:hover{border-color:#d89ab8;background:#fff8fb}
+.exercise-action.danger{color:#a81452;border-color:#f1c6d8;background:#fff9fb}
+.exercise-action.danger:hover{background:#fff0f5;border-color:#e999bb}
+.add-exercise-card{border-style:dashed;background:linear-gradient(180deg,#fff 0%,#fffafd 100%)}
+.add-exercise-card:hover{border-color:var(--magenta);background:#fff5fa}
+#exerciseModal .notice strong{color:var(--ink)}
+@media(max-width:720px){
+ .exercise-card-actions{gap:8px}
+ .exercise-action{min-height:30px;padding:7px 10px;font-size:9px;flex:1}
+ .compact-timeline .exercise-card{min-width:195px}
+}

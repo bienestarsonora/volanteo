@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?rev=journey-crud-real-data">
+  <link rel="stylesheet" href="../assets/styles.css?rev=exercise-management">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -70,7 +70,7 @@
       <section class="premium-panel strategist-schedule" id="operativos">
         <div class="section-intro-row">
           <div><div class="eyebrow">Ciclo de difusión</div><h2>¿Qué ejercicio vas a trabajar?</h2><p>Selecciona el turno. El mapa, las rutas y los equipos cambiarán a ese ejercicio.</p></div>
-          <button class="btn btn-soft" id="addExerciseQuickBtn">+ Ejercicio adicional</button>
+          <button class="btn btn-soft" id="addExerciseQuickBtn">+ Nueva difusión</button>
         </div>
         <div class="timeline premium-timeline compact-timeline" id="exerciseTimeline"></div>
       </section>
@@ -200,7 +200,9 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="journeyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Planeación</div><h3>Nueva Jornada del Bienestar</h3></div><button class="icon-btn" data-close="journeyModal">×</button></div><div class="form-grid"><div class="field"><label>Sede / colonia</label><input id="newVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label>Fecha de la jornada</label><input id="newDate" type="date"></div></div><div class="field"><label>Hora de la jornada</label><input id="newTime" type="time" value="17:00"></div><div class="notice">Si la jornada es martes o viernes se generará automáticamente el calendario habitual de difusión previa. Después puedes agregar ejercicios adicionales.</div><div class="modal-actions"><button class="btn btn-soft" data-close="journeyModal">Cancelar</button><button class="btn btn-primary" id="createJourneyBtn">Crear jornada</button></div></div></div>
+<div class="modal-backdrop" id="journeyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Planeación</div><h3>Nueva Jornada del Bienestar</h3></div><button class="icon-btn" data-close="journeyModal">×</button></div><div class="form-grid"><div class="field"><label>Sede / colonia</label><input id="newVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label>Fecha de la jornada</label><input id="newDate" type="date"></div></div><div class="field"><label>Hora de la jornada</label><input id="newTime" type="time" value="17:00"></div><label class="journey-edit-option"><input id="newSuggestedExercises" type="checkbox"><span><strong>Cargar calendario habitual como sugerencia</strong><small>Si lo activas, se crean las difusiones típicas según el día de la Jornada. Todas podrán editarse o eliminarse.</small></span></label><div class="notice">Por defecto la Jornada se crea <strong>sin inventar difusiones</strong>. Al guardarla podrás agregar exactamente mañana, tarde o cualquier horario que realmente vayan a trabajar.</div><div class="modal-actions"><button class="btn btn-soft" data-close="journeyModal">Cancelar</button><button class="btn btn-primary" id="createJourneyBtn">Crear jornada</button></div></div></div>
+
+<div class="modal-backdrop" id="exerciseModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Ciclo de difusión</div><h3 id="exerciseModalTitle">Nueva difusión</h3></div><button class="icon-btn" data-close="exerciseModal">×</button></div><div class="form-grid"><div class="field"><label for="exerciseDate">Fecha</label><input id="exerciseDate" type="date"></div><div class="field"><label for="exerciseShift">Turno / nombre</label><input id="exerciseShift" placeholder="Ej. Mañana o Tarde"></div></div><div class="field"><label for="exerciseTime">Hora de inicio</label><input id="exerciseTime" type="time" value="08:30"></div><div class="notice" id="exerciseModalNotice">Agrega únicamente los ejercicios de difusión que realmente vayas a realizar.</div><div class="modal-actions"><button class="btn btn-soft" data-close="exerciseModal">Cancelar</button><button class="btn btn-primary" id="exerciseSaveBtn" type="button">Agregar difusión</button></div></div></div>
 
 <div class="modal-backdrop" id="editJourneyModal" hidden><div class="modal"><div class="modal-head"><div><div class="eyebrow">Gestión de jornada</div><h3>Editar Jornada del Bienestar</h3></div><button class="icon-btn" data-close="editJourneyModal">×</button></div><div class="form-grid"><div class="field"><label for="editJourneyVenue">Sede / colonia</label><input id="editJourneyVenue" placeholder="Ej. Solidaridad"></div><div class="field"><label for="editJourneyDate">Fecha de la jornada</label><input id="editJourneyDate" type="date"></div></div><div class="field"><label for="editJourneyTime">Hora de la jornada</label><input id="editJourneyTime" type="time"></div><label class="journey-edit-option"><input id="shiftJourneyExercises" type="checkbox" checked><span><strong>Ajustar también las fechas de los ejercicios de difusión</strong><small>Conserva rutas, equipos y avances, y mueve cada ejercicio la misma cantidad de días que cambie la Jornada.</small></span></label><div class="notice">Editar la Jornada no borra rutas ni seguimiento. Solo actualiza sus datos generales y, si eliges la opción anterior, las fechas de sus ejercicios.</div><div class="modal-actions"><button class="btn btn-soft" data-close="editJourneyModal">Cancelar</button><button class="btn btn-primary" id="saveEditJourneyBtn">Guardar cambios</button></div></div></div>
 
@@ -225,10 +227,10 @@
   </div>
 </div>
 
-<script src="../assets/map-runtime.js?rev=journey-management"></script>
-<script src="../assets/config.js?rev=journey-management"></script>
-<script src="../assets/cloud-api.js?rev=journey-management"></script>
-<script src="../assets/admin-dashboard.js?rev=journey-management"></script>
-<script src="../assets/admin-login.js?rev=journey-management"></script>
+<script src="../assets/map-runtime.js?rev=exercise-management"></script>
+<script src="../assets/config.js?rev=exercise-management"></script>
+<script src="../assets/cloud-api.js?rev=exercise-management"></script>
+<script src="../assets/admin-dashboard.js?rev=exercise-management"></script>
+<script src="../assets/admin-login.js?rev=exercise-management"></script>
 </body>
 </html>

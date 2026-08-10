@@ -233,16 +233,38 @@ function renderRosterSummary(){
  $('#rosterPreview').innerHTML=active.length?active.slice(0,8).map(p=>`<span class="roster-chip"><span class="avatar">${initials(p.name)}</span>${p.name}</span>`).join(''):'<span class="small muted">No hay brigadistas activos. Agrega personas al catálogo.</span>';
  renderMemberPicker('#memberPicker');
 }
-function renderTimeline(){const j=getJourney();const el=$('#exerciseTimeline');el.innerHTML=(j.exercises||[]).map((e,i)=>{const routes=e.routes||[];const done=routes.length&&routes.every(r=>r.status==='done');const live=routes.some(r=>r.status==='live');const cls=done?'done':live?'live':'';const stateTxt=done?'Finalizado':live?'En campo':'Programado';return `<article class="exercise-card ${e.id===state.activeExerciseId?'active':''}" data-exercise="${e.id}"><div class="exercise-top"><div><strong>Difusión ${String(i+1).padStart(2,'0')} · ${e.shift}</strong><small>${fmtShort(e.date)} · ${e.time} h</small></div><span class="exercise-state ${cls}">${stateTxt}</span></div><div class="exercise-meta">${routes.length} ${routes.length===1?'ruta':'rutas'} · ${routes.filter(r=>r.type==='perifoneo').length} perifoneo</div></article>`}).join('')+`<article class="exercise-card" id="addExerciseCard"><div class="exercise-top"><div><strong>+ Agregar ejercicio</strong><small>Turno extraordinario o adicional</small></div></div><div class="exercise-meta">Personaliza fecha y horario</div></article>`;
+function renderTimeline(){
+ const j=getJourney(),el=$('#exerciseTimeline');if(!el||!j)return;
+ const cards=(j.exercises||[]).map((e,i)=>{
+  const routes=e.routes||[],done=routes.length&&routes.every(r=>r.status==='done'),live=routes.some(r=>r.status==='live'),cls=done?'done':live?'live':'',stateTxt=done?'Finalizado':live?'En campo':'Programado';
+  return `<article class="exercise-card ${e.id===state.activeExerciseId?'active':''}" data-exercise="${e.id}">
+   <div class="exercise-top"><div><strong>Difusión ${String(i+1).padStart(2,'0')} · ${e.shift}</strong><small>${fmtShort(e.date)} · ${e.time} h</small></div><span class="exercise-state ${cls}">${stateTxt}</span></div>
+   <div class="exercise-meta">${routes.length} ${routes.length===1?'ruta':'rutas'} · ${routes.filter(r=>r.type==='perifoneo').length} perifoneo</div>
+   <div class="exercise-card-actions">
+    <button type="button" class="exercise-action" data-edit-exercise="${e.id}" aria-label="Editar difusión ${i+1}">Editar</button>
+    <button type="button" class="exercise-action danger" data-delete-exercise="${e.id}" aria-label="Eliminar difusión ${i+1}">Eliminar</button>
+   </div>
+  </article>`;
+ }).join('');
+ el.innerHTML=cards+`<article class="exercise-card add-exercise-card" id="addExerciseCard"><div class="exercise-top"><div><strong>+ Agregar difusión</strong><small>Fecha, turno y horario exactos</small></div></div><div class="exercise-meta">Sin calendarios forzados</div></article>`;
  $$('.exercise-card[data-exercise]').forEach(c=>c.addEventListener('click',()=>{state.activeExerciseId=c.dataset.exercise;saveState();renderJourneys()}));
- $('#addExerciseCard')?.addEventListener('click',addCustomExercise);
+ $$('[data-edit-exercise]').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();openExerciseModal(b.dataset.editExercise)}));
+ $$('[data-delete-exercise]').forEach(b=>b.addEventListener('click',ev=>{ev.stopPropagation();deleteExercise(b.dataset.deleteExercise)}));
+ $('#addExerciseCard')?.addEventListener('click',()=>openExerciseModal());
 }
 function renderMetrics(){const j=getJourney(), routes=allRoutes(j), unique=new Set(routes.flatMap(r=>r.memberIds||[]));const avg=routes.length?Math.round(routes.reduce((a,r)=>a+(r.progress||0),0)/routes.length):0;$('#mExercises').textContent=j.exercises.length;$('#mRoutes').textContent=routes.length;$('#mPeople').textContent=unique.size;$('#mCoverage').textContent=avg+'%'}
-function renderExerciseContext(){const e=getExercise();if(!e)return;$('#exerciseTitle').textContent=`${fmtShort(e.date)} · ${e.shift}`;$('#exerciseSub').textContent=`Ejercicio de difusión ${e.time} h · ${(e.routes||[]).length} rutas guardadas`;$('#exerciseState').textContent=(e.routes||[]).some(r=>r.status==='live')?'En campo':(e.routes||[]).length&&e.routes.every(r=>r.status==='done')?'Finalizado':'Programado'}
+function renderExerciseContext(){const e=getExercise();if(!e){$('#exerciseTitle').textContent='Agrega una difusión';$('#exerciseSub').textContent='Define la fecha, turno y hora que realmente vayan a trabajar.';$('#exerciseState').textContent='Sin programar';return}$('#exerciseTitle').textContent=`${fmtShort(e.date)} · ${e.shift}`;$('#exerciseSub').textContent=`Ejercicio de difusión ${e.time} h · ${(e.routes||[]).length} rutas guardadas`;$('#exerciseState').textContent=(e.routes||[]).some(r=>r.status==='live')?'En campo':(e.routes||[]).length&&e.routes.every(r=>r.status==='done')?'Finalizado':'Programado'}
 
 
 function renderDashboardExtras(){
- const j=getJourney(),e=getExercise();if(!j||!e)return;
+ const j=getJourney(),e=getExercise();
+ if(!j)return;
+ if(!e){
+  const currentDate=$('#currentDateLabel');if(currentDate)currentDate.textContent=`${fmtShort(j.date)} · ${j.time} h`;
+  const side=$('#sideRouteList');if(side)side.innerHTML='<div class="notice">Agrega una difusión para comenzar a diseñar rutas.</div>';
+  const today=$('#todayOps');if(today)today.innerHTML='';
+  renderMapLegend();return;
+ }
  const currentDate=$('#currentDateLabel');if(currentDate)currentDate.textContent=`${fmtShort(j.date)} · ${j.time} h`;
  const routes=e.routes||[];
  const today=$('#todayOps');if(today){
@@ -254,7 +276,7 @@ function renderDashboardExtras(){
  renderMapLegend();
 }
 function renderMapLegend(){
- const legend=$('#mapLegend');if(!legend)return;const j=getJourney(),e=getExercise();if(!j||!e)return;const routes=mapFilter==='journey'?allRoutes(j):(e.routes||[]);legend.innerHTML=`<strong>${mapFilter==='journey'?'Rutas de la jornada':'Rutas del ejercicio'}</strong><div class="legend-items">${routes.length?routes.map(r=>`<div class="legend-row"><i style="background:${r.color}"></i><span>${r.name}</span></div>`).join(''):'Sin rutas guardadas'}</div>`;
+ const legend=$('#mapLegend');if(!legend)return;const j=getJourney(),e=getExercise();if(!j)return;if(!e){legend.innerHTML='<strong>Rutas del ejercicio</strong><div class="legend-items">Agrega una difusión para comenzar</div>';return}const routes=mapFilter==='journey'?allRoutes(j):(e.routes||[]);legend.innerHTML=`<strong>${mapFilter==='journey'?'Rutas de la jornada':'Rutas del ejercicio'}</strong><div class="legend-items">${routes.length?routes.map(r=>`<div class="legend-row"><i style="background:${r.color}"></i><span>${r.name}</span></div>`).join(''):'Sin rutas guardadas'}</div>`;
 }
 
 function renderMemberPicker(containerId,selectedIds=[]){
@@ -737,11 +759,85 @@ function duplicateRoute(id){const e=getExercise(),r=e.routes.find(x=>x.id===id);
 function openEditRoute(id){const e=getExercise(),r=e.routes.find(x=>x.id===id);if(!r)return;editingRouteId=id;$('#editRouteName').value=r.name;renderMemberPicker('#editMemberPicker',r.memberIds||[]);$('#editRouteModal').hidden=false}
 function saveEditRoute(){const e=getExercise(),r=e.routes.find(x=>x.id===editingRouteId);if(!r)return;r.name=$('#editRouteName').value.trim()||r.name;r.memberIds=selectedMemberIds('#editMemberPicker');if(!r.memberIds.length)return alert('Selecciona al menos un brigadista.');r.members=r.memberIds.map(id=>personById(id)?.name).filter(Boolean);saveState();$('#editRouteModal').hidden=true;renderJourneys()}
 
-function addCustomExercise(){const j=getJourney();if(!j)return alert('Primero crea una Jornada del Bienestar.');const date=prompt('Fecha del ejercicio (AAAA-MM-DD):',j.date);if(!date)return;const shift=prompt('Turno o nombre del ejercicio:','Tarde')||'Adicional';const time=prompt('Hora (HH:MM):','16:00')||'16:00';const e={id:uid('ex'),date,shift,time,status:'scheduled',routes:[],order:j.exercises.length+1};j.exercises.push(e);j.exercises.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));state.activeExerciseId=e.id;saveState();renderJourneys()}
-function createJourney(){const venue=$('#newVenue').value.trim(),date=$('#newDate').value,time=$('#newTime').value||'17:00';if(!venue||!date)return alert('Captura sede y fecha.');const j={id:uid('journey'),venue,date,time,archived:false,createdAt:Date.now(),exercises:buildExercises(date)};state.journeys.push(j);state.activeJourneyId=j.id;state.activeExerciseId=j.exercises[0]?.id||null;saveState();$('#journeyModal').hidden=true;$('#newVenue').value='';$('#newDate').value='';$('#newTime').value='17:00';renderJourneys()}
+function sortExercises(j){
+ if(!j)return;
+ j.exercises=(j.exercises||[]).sort((a,b)=>String((a.date||'')+(a.time||'')).localeCompare(String((b.date||'')+(b.time||''))));
+ j.exercises.forEach((e,i)=>e.order=i+1);
+}
+function openExerciseModal(id=null){
+ const j=getJourney();if(!j)return alert('Primero crea una Jornada del Bienestar.');
+ const modal=$('#exerciseModal');if(!modal)return;
+ const e=id?(j.exercises||[]).find(x=>String(x.id)===String(id)):null;
+ modal.dataset.exerciseId=e?.id||'';
+ $('#exerciseModalTitle').textContent=e?'Editar difusión':'Nueva difusión';
+ $('#exerciseDate').value=e?.date||addDays(j.date,-1);
+ $('#exerciseShift').value=e?.shift||'Mañana';
+ $('#exerciseTime').value=e?.time||(e?.shift==='Tarde'?'16:00':'08:30');
+ $('#exerciseSaveBtn').textContent=e?'Guardar cambios':'Agregar difusión';
+ $('#exerciseModalNotice').innerHTML=e
+  ?`Esta edición conserva sus <strong>${(e.routes||[]).length} ${(e.routes||[]).length===1?'ruta':'rutas'}</strong>, equipos y avances.`
+  :'Agrega únicamente los ejercicios de difusión que realmente vayas a realizar.';
+ modal.hidden=false;
+ setTimeout(()=>$('#exerciseDate')?.focus(),20);
+}
+async function saveExercise(){
+ const j=getJourney(),modal=$('#exerciseModal');if(!j||!modal)return;
+ const id=modal.dataset.exerciseId||null,date=$('#exerciseDate').value,shift=normalizeName($('#exerciseShift').value),time=$('#exerciseTime').value;
+ if(!date||!shift||!time)return alert('Captura fecha, turno y hora de la difusión.');
+ let e=id?(j.exercises||[]).find(x=>String(x.id)===String(id)):null;
+ if(e){
+  e.date=date;e.shift=shift;e.time=time;e.updatedAt=Date.now();
+ }else{
+  e={id:uid('ex'),date,shift,time,status:'scheduled',routes:[],order:(j.exercises||[]).length+1,createdAt:Date.now()};
+  j.exercises=j.exercises||[];j.exercises.push(e);state.activeExerciseId=e.id;
+ }
+ sortExercises(j);
+ await saveState(state,{immediate:true});
+ modal.hidden=true;renderJourneys();
+}
+async function deleteExercise(id){
+ const j=getJourney();if(!j)return;
+ const e=(j.exercises||[]).find(x=>String(x.id)===String(id));if(!e)return;
+ const routes=e.routes||[],reports=routes.reduce((n,r)=>n+Number(r.blockReports?.length||0),0);
+ let msg=`¿Eliminar la difusión ${fmtShort(e.date)} · ${e.shift} (${e.time} h)?`;
+ if(routes.length)msg+=`\n\nTambién se eliminarán ${routes.length} ${routes.length===1?'ruta':'rutas'} asociadas`;
+ if(reports)msg+=` y ${reports} ${reports===1?'reporte':'reportes'} de campo`;
+ msg+='.';
+ if(!confirm(msg))return;
+ if(routes.length&&prompt('Esta difusión ya tiene rutas. Para confirmar, escribe ELIMINAR:','')!=='ELIMINAR')return;
+ const routeIds=routes.map(r=>r.id).filter(Boolean);
+ j.exercises=j.exercises.filter(x=>String(x.id)!==String(id));sortExercises(j);
+ if(String(state.activeExerciseId)===String(id))state.activeExerciseId=j.exercises[0]?.id||null;
+ renderJourneys();setCloudStatus(cloudMode?'Guardando eliminación…':'Actualizado',true);
+ try{
+  await saveState(state,{immediate:true});
+  if(cloudMode&&window.VolanteoCloud?.adminDeleteRouteData){for(const rid of routeIds)await window.VolanteoCloud.adminDeleteRouteData(rid)}
+  setCloudStatus('En línea',true);
+ }catch(err){
+  console.error('No se pudo completar la eliminación de la difusión',err);
+  setCloudStatus('Eliminación pendiente de sincronizar',false);
+  alert('La difusión se quitó de la pantalla, pero Supabase no confirmó toda la eliminación. No recargues todavía; revisa la conexión.');
+ }
+}
+function addCustomExercise(){openExerciseModal()}
+function createJourney(){
+ const venue=$('#newVenue').value.trim(),date=$('#newDate').value,time=$('#newTime').value||'17:00';if(!venue||!date)return alert('Captura sede y fecha.');if(!confirmJourneyDate(date))return;
+ const useSuggested=Boolean($('#newSuggestedExercises')?.checked);
+ const exercises=useSuggested?buildExercises(date):[];
+ const j={id:uid('journey'),venue,date,time,archived:false,createdAt:Date.now(),exercises};
+ state.journeys.push(j);state.activeJourneyId=j.id;state.activeExerciseId=j.exercises[0]?.id||null;
+ saveState();$('#journeyModal').hidden=true;$('#newVenue').value='';$('#newDate').value='';$('#newTime').value='17:00';if($('#newSuggestedExercises'))$('#newSuggestedExercises').checked=false;renderJourneys();
+ if(!j.exercises.length)setTimeout(()=>openExerciseModal(),60);
+}
 function dateDiffDays(from,to){const a=new Date(from+'T12:00:00'),b=new Date(to+'T12:00:00');return Math.round((b-a)/86400000)}
+function confirmJourneyDate(date){
+ if(!date)return false;
+ const selected=new Date(date+'T12:00:00'),today=new Date();today.setHours(0,0,0,0);
+ if(selected.getTime()<today.getTime()-86400000)return confirm(`La fecha seleccionada es ${fmtDate(date)} y ya está en el pasado.\n\n¿Quieres guardarla de todos modos?`);
+ return true;
+}
 function openEditJourney(id){const j=state.journeys.find(x=>x.id===(id||state.activeJourneyId))||getJourney();if(!j)return alert('No hay una jornada para editar.');$('#editJourneyModal').dataset.journeyId=j.id;$('#editJourneyVenue').value=j.venue||'';$('#editJourneyDate').value=j.date||'';$('#editJourneyTime').value=j.time||'17:00';$('#shiftJourneyExercises').checked=true;$('#editJourneyModal').hidden=false}
-async function saveEditJourney(){const modal=$('#editJourneyModal'),j=state.journeys.find(x=>x.id===modal?.dataset.journeyId);if(!j)return;const venue=normalizeName($('#editJourneyVenue').value),newDate=$('#editJourneyDate').value,newTime=$('#editJourneyTime').value||'17:00';if(!venue||!newDate)return alert('Captura sede y fecha.');const oldDate=j.date,delta=dateDiffDays(oldDate,newDate);j.venue=venue;j.date=newDate;j.time=newTime;j.updatedAt=Date.now();if(delta&&$('#shiftJourneyExercises').checked){for(const e of j.exercises||[])e.date=addDays(e.date,delta)}await saveState(state,{immediate:true});modal.hidden=true;renderJourneys()}
+async function saveEditJourney(){const modal=$('#editJourneyModal'),j=state.journeys.find(x=>x.id===modal?.dataset.journeyId);if(!j)return;const venue=normalizeName($('#editJourneyVenue').value),newDate=$('#editJourneyDate').value,newTime=$('#editJourneyTime').value||'17:00';if(!venue||!newDate)return alert('Captura sede y fecha.');if(!confirmJourneyDate(newDate))return;const oldDate=j.date,delta=dateDiffDays(oldDate,newDate);j.venue=venue;j.date=newDate;j.time=newTime;j.updatedAt=Date.now();if(delta&&$('#shiftJourneyExercises').checked){for(const e of j.exercises||[])e.date=addDays(e.date,delta)}await saveState(state,{immediate:true});modal.hidden=true;renderJourneys()}
 async function archiveJourney(){const j=getJourney();if(!j)return;if(!confirm(`¿Archivar la Jornada ${j.venue}? Sus ejercicios, rutas, equipos y seguimiento se conservarán en Historial.`))return;j.archived=true;const next=state.journeys.find(x=>!x.archived&&x.id!==j.id);state.activeJourneyId=next?.id||null;state.activeExerciseId=next?.exercises?.[0]?.id||null;await saveState(state,{immediate:true});renderJourneys()}
 async function deleteJourney(id){const j=state.journeys.find(x=>x.id===(id||state.activeJourneyId));if(!j)return;const routes=(j.exercises||[]).flatMap(e=>e.routes||[]),reports=routes.reduce((n,r)=>n+Number(r.blockReports?.length||0),0);let question=`Vas a eliminar definitivamente la Jornada ${j.venue} del ${fmtShort(j.date)}.\n\nSe borrarán ${j.exercises?.length||0} ejercicio(s) y ${routes.length} ruta(s)`;if(reports)question+=`, además de ${reports} reporte(s) registrado(s)`;question+='.\n\nEsta acción no se puede deshacer. ¿Continuar?';if(!confirm(question))return;if(routes.length&&prompt('Para confirmar una jornada con rutas, escribe ELIMINAR:','')!=='ELIMINAR')return;const routeIds=routes.map(r=>r.id).filter(Boolean);state.journeys=state.journeys.filter(x=>x.id!==j.id);if(state.activeJourneyId===j.id){const next=state.journeys.find(x=>!x.archived);state.activeJourneyId=next?.id||null;state.activeExerciseId=next?.exercises?.[0]?.id||null}renderJourneys();try{await saveState(state,{immediate:true});if(cloudMode&&window.VolanteoCloud?.adminDeleteRouteData){for(const routeId of routeIds)await window.VolanteoCloud.adminDeleteRouteData(routeId)}setCloudStatus('En línea',true)}catch(err){console.error('No se pudo completar la eliminación de la jornada',err);setCloudStatus('Eliminación pendiente de sincronizar',false);alert('La jornada se quitó de la pantalla, pero Supabase no confirmó toda la eliminación. No recargues todavía; revisa la conexión e intenta guardar nuevamente.')}}
 
@@ -760,7 +856,9 @@ function bind(){
  $('#undoBtn').addEventListener('click',()=>{draft=draft.slice(0,-1);analysisRunId++;clearRoadAnalysis();refreshDraft();updateGoal();updateDrawingHint()});$('#clearBtn').addEventListener('click',()=>{drawSessionId++;analysisRunId++;draft=[];clearRoadAnalysis();setDrawingUI(false);refreshDraft();updateGoal();$('#drawNotice').className='notice';$('#drawNotice').textContent='Trazado reiniciado. Puedes comenzar de nuevo cuando quieras.'});$('#saveRouteBtn').addEventListener('click',saveRoute);$('#saveEditRouteBtn').addEventListener('click',saveEditRoute);
  $('#retryAnalysisBtn')?.addEventListener('click',async()=>{if(draft.length<3)return alert('La zona ya no tiene suficientes puntos. Delimítala de nuevo.');const btn=$('#retryAnalysisBtn');btn.disabled=true;await analyzeZone(draft,{force:true});btn.disabled=false;});
  $('#applyManualGoalBtn')?.addEventListener('click',applyManualGoal);$('#manualGoalInput')?.addEventListener('input',()=>{manualGoalOverride=null;updateGoal()});
- $('#addExerciseQuickBtn')?.addEventListener('click',addCustomExercise);
+ $('#addExerciseQuickBtn')?.addEventListener('click',()=>openExerciseModal());
+ $('#exerciseSaveBtn')?.addEventListener('click',saveExercise);
+ $('#exerciseShift')?.addEventListener('keydown',e=>{if(e.key==='Enter')saveExercise()});
  $('#sidebarToggle')?.addEventListener('click',()=>$('#appSidebar')?.classList.toggle('open'));
  $$('[data-scroll]').forEach(el=>el.addEventListener('click',ev=>{const id=el.dataset.scroll,target=document.getElementById(id);if(target){ev.preventDefault();target.scrollIntoView({behavior:'smooth',block:'start'});$$('.nav-item').forEach(n=>n.classList.toggle('active',n===el));$('#appSidebar')?.classList.remove('open')}}));
 }
