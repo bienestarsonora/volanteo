@@ -92,15 +92,63 @@
   async function isAdmin(){return Boolean(await rpc('is_admin',{},true))}
 
   function findRoute(state,routeId){for(const j of state?.journeys||[])for(const e of j.exercises||[])for(const r of e.routes||[])if(String(r.id)===String(routeId))return r;return null}
+  function gpsDistanceMeters(a,b){
+    if(!a||!b)return 0;
+    const lat1=Number(a.lat),lng1=Number(a.lng),lat2=Number(b.lat),lng2=Number(b.lng);
+    if(![lat1,lng1,lat2,lng2].every(Number.isFinite))return 0;
+    const R=6371000,toRad=v=>v*Math.PI/180,dLat=toRad(lat2-lat1),dLng=toRad(lng2-lng1);
+    const q=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+    const d=2*R*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q)));
+    return d>=3&&d<=500?d:0;
+  }
+  function hydrateGpsTracks(state,locations){
+    for(const j of state?.journeys||[])for(const e of j.exercises||[])for(const r of e.routes||[]){
+      Object.defineProperties(r,{
+        gpsTracks:{value:[],writable:true,configurable:true,enumerable:false},
+        gpsPointCount:{value:0,writable:true,configurable:true,enumerable:false},
+        gpsDistanceKm:{value:0,writable:true,configurable:true,enumerable:false},
+        gpsFirstAt:{value:null,writable:true,configurable:true,enumerable:false},
+        gpsLastAt:{value:null,writable:true,configurable:true,enumerable:false}
+      });
+    }
+    const grouped=new Map();
+    for(const loc of locations||[]){
+      const routeId=String(loc.route_id||''),personId=String(loc.brigadista_id||'');if(!routeId||!personId)continue;
+      const routeMap=grouped.get(routeId)||new Map(),pts=routeMap.get(personId)||[];
+      pts.push({lat:Number(loc.lat),lng:Number(loc.lng),accuracy:Number(loc.accuracy_m||0),at:loc.recorded_at,brigadistaId:personId});routeMap.set(personId,pts);grouped.set(routeId,routeMap);
+    }
+    const names=new Map((state?.brigadistas||[]).map(p=>[String(p.id),p.name]));
+    for(const [routeId,routeMap] of grouped){
+      const r=findRoute(state,routeId);if(!r)continue;
+      const tracks=[...routeMap.entries()].map(([brigadistaId,points])=>{
+        points.sort((a,b)=>new Date(a.at)-new Date(b.at));
+        let distanceM=0;for(let i=1;i<points.length;i++)distanceM+=gpsDistanceMeters(points[i-1],points[i]);
+        return{brigadistaId,name:names.get(brigadistaId)||'Brigadista',points,distanceM};
+      });
+      const pointCount=tracks.reduce((n,t)=>n+t.points.length,0),distanceKm=tracks.reduce((n,t)=>n+t.distanceM,0)/1000;
+      const all=tracks.flatMap(t=>t.points).sort((a,b)=>new Date(a.at)-new Date(b.at));
+      // La huella GPS es un dato operativo derivado de route_locations; no debe volver a
+      // guardarse dentro de app_state ni inflar el JSON de planeación.
+      Object.defineProperties(r,{
+        gpsTracks:{value:tracks,writable:true,configurable:true,enumerable:false},
+        gpsPointCount:{value:pointCount,writable:true,configurable:true,enumerable:false},
+        gpsDistanceKm:{value:distanceKm,writable:true,configurable:true,enumerable:false},
+        gpsFirstAt:{value:all[0]?.at||null,writable:true,configurable:true,enumerable:false},
+        gpsLastAt:{value:all.at(-1)?.at||null,writable:true,configurable:true,enumerable:false}
+      });
+    }
+  }
   async function hydrateRuntime(state){
     if(!state)return state;
-    const [runtime,reports]=await Promise.all([
+    const [runtime,reports,locations]=await Promise.all([
       request('/rest/v1/route_runtime?select=*',{admin:true}),
-      request('/rest/v1/route_reports?select=*&order=reported_at.asc',{admin:true})
+      request('/rest/v1/route_reports?select=*&order=reported_at.asc',{admin:true}),
+      request('/rest/v1/route_locations?select=id,route_id,brigadista_id,lat,lng,accuracy_m,recorded_at&order=recorded_at.desc&limit=10000',{admin:true,timeoutMs:12000}).catch(err=>{console.warn('No se pudo cargar la huella GPS',err);return[]})
     ]);
     const reportMap=new Map();
-    for(const rep of reports||[]){const arr=reportMap.get(rep.route_id)||[];arr.push({id:rep.id,number:rep.block_number,reportedAt:rep.reported_at,reportedBy:rep.reported_by||'',brigadistaId:rep.brigadista_id,lat:rep.lat,lng:rep.lng});reportMap.set(rep.route_id,arr)}
+    for(const rep of reports||[]){const arr=reportMap.get(rep.route_id)||[];arr.push({id:rep.id,number:rep.block_number,reportedAt:rep.reported_at,reportedBy:rep.reported_by||'',brigadistaId:rep.brigadista_id,lat:rep.lat,lng:rep.lng,validationStatus:rep.validation_status||'review',validationReason:rep.validation_reason||'',gpsPoints:Number(rep.gps_points_since_last||0),movementM:Number(rep.movement_m||0),accuracyM:rep.accuracy_m==null?null:Number(rep.accuracy_m),inZone:rep.in_zone,elapsedSeconds:Number(rep.elapsed_seconds||0)});reportMap.set(rep.route_id,arr)}
     for(const rt of runtime||[]){const r=findRoute(state,rt.route_id);if(!r)continue;r.status=rt.status||r.status||'pending';r.progress=Number(rt.progress||0);r.completedBlocks=Number(rt.completed_blocks||0);r.completedUnits=Number(rt.completed_units??r.completedBlocks??0);r.startedAt=rt.started_at||r.startedAt;r.finishedAt=rt.finished_at||r.finishedAt;r.lastPosition=rt.last_position||null;r.lastPositionAt=rt.last_position_at||null;r.lastProgressAt=rt.last_progress_at||null;r.blockReports=reportMap.get(rt.route_id)||[]}
+    hydrateGpsTracks(state,locations);
     return state;
   }
   async function adminLoadState(){

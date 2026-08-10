@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#8f0a4a">
   <title>Centro de Operación Territorial | Bienestar Sonora</title>
-  <link rel="stylesheet" href="../assets/styles.css?rev=multi-route-mobile-return">
+  <link rel="stylesheet" href="../assets/styles.css?rev=gps-evidence-monitoring">
 </head>
 <body class="admin-body strategist-ui">
 <div class="admin-shell" id="adminApp" hidden>
@@ -179,6 +179,18 @@
           <div><div class="eyebrow">Seguimiento</div><h2>¿Qué está pasando en campo?</h2><p>Solo las rutas del ejercicio seleccionado: estado, equipo, meta y avance.</p></div>
         </div>
         <div class="tracking-list clean-tracking-list" id="trackingList"></div>
+        <div class="gps-evidence-panel" id="gpsEvidencePanel" hidden>
+          <div class="gps-evidence-head">
+            <div><div class="eyebrow">Evidencia territorial</div><h3 id="gpsEvidenceTitle">Recorrido GPS</h3><p id="gpsEvidenceSubtitle">Compara la ruta programada con la trayectoria efectivamente registrada.</p></div>
+            <button class="icon-btn" id="closeGpsEvidenceBtn" type="button" aria-label="Cerrar evidencia GPS">×</button>
+          </div>
+          <div class="gps-evidence-metrics" id="gpsEvidenceMetrics"></div>
+          <div class="gps-evidence-layout">
+            <div class="gps-evidence-map" id="gpsEvidenceMap"><div class="map-fallback">Selecciona una ruta con evidencia GPS.</div></div>
+            <div class="gps-evidence-reports" id="gpsEvidenceReports"></div>
+          </div>
+          <div class="gps-evidence-note">La trayectoria GPS es evidencia de apoyo para monitoreo y evaluación; no sustituye por sí sola una verificación administrativa.</div>
+        </div>
       </section>
 
       <section class="secondary-tools">
@@ -237,10 +249,10 @@
   </div>
 </div>
 
-<script src="../assets/map-runtime.js?rev=multi-route-mobile-return"></script>
-<script src="../assets/config.js?rev=multi-route-mobile-return"></script>
-<script src="../assets/cloud-api.js?rev=multi-route-mobile-return"></script>
-<script src="../assets/admin-dashboard.js?rev=multi-route-mobile-return"></script>
-<script src="../assets/admin-login.js?rev=multi-route-mobile-return"></script>
+<script src="../assets/map-runtime.js?rev=gps-evidence-monitoring"></script>
+<script src="../assets/config.js?rev=gps-evidence-monitoring"></script>
+<script src="../assets/cloud-api.js?rev=gps-evidence-monitoring"></script>
+<script src="../assets/admin-dashboard.js?rev=gps-evidence-monitoring"></script>
+<script src="../assets/admin-login.js?rev=gps-evidence-monitoring"></script>
 </body>
 </html>

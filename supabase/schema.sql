@@ -583,3 +583,348 @@ end $$;
 -- insert into public.profiles(user_id,role)
 -- select id,'admin' from auth.users where email='TU_CORREO@dominio.com'
 -- on conflict(user_id) do update set role='admin';
+
+-- ============================================================
+-- EXTENSIÓN: EVIDENCIA GPS Y VALIDACIÓN DE RECORRIDO
+-- ============================================================
+-- Volanteo · Bienestar Sonora
+-- MIGRACIÓN: evidencia GPS, trayectoria real y validación de cuadras
+-- Ejecutar UNA SOLA VEZ en Supabase > SQL Editor.
+-- No borra jornadas, rutas, brigadistas ni seguimiento existente.
+
+-- 1) Evidencia asociada a cada reporte de cuadra.
+alter table public.route_reports add column if not exists validation_status text not null default 'review';
+alter table public.route_reports add column if not exists validation_reason text;
+alter table public.route_reports add column if not exists gps_points_since_last integer not null default 0;
+alter table public.route_reports add column if not exists movement_m double precision not null default 0;
+alter table public.route_reports add column if not exists accuracy_m double precision;
+alter table public.route_reports add column if not exists in_zone boolean;
+alter table public.route_reports add column if not exists elapsed_seconds integer not null default 0;
+
+-- Los reportes existentes se conservan. Como fueron generados antes de esta validación,
+-- quedan marcados para revisión histórica en vez de declararlos automáticamente válidos.
+update public.route_reports
+   set validation_status='review',
+       validation_reason=coalesce(validation_reason,'Reporte anterior a la validación GPS')
+ where validation_status is distinct from 'validated'
+   and coalesce(validation_reason,'')='';
+
+-- 2) Distancia geodésica simple para evaluar desplazamiento entre puntos GPS.
+create or replace function public._gps_distance_m(
+  p_lat1 double precision, p_lng1 double precision,
+  p_lat2 double precision, p_lng2 double precision
+)
+returns double precision
+language sql
+immutable
+as $$
+  select case
+    when p_lat1 is null or p_lng1 is null or p_lat2 is null or p_lng2 is null then 0::double precision
+    else 6371000::double precision * 2 * asin(
+      sqrt(
+        least(1::double precision,greatest(0::double precision,
+          power(sin(radians(p_lat2-p_lat1)/2),2) +
+          cos(radians(p_lat1))*cos(radians(p_lat2))*power(sin(radians(p_lng2-p_lng1)/2),2)
+        ))
+      )
+    )
+  end;
+$$;
+
+-- 3) Validación aproximada de presencia dentro de una zona poligonal.
+-- Para rutas lineales/perifoneo devuelve TRUE: la validación de cuadras aplica a zonas.
+create or replace function public._route_point_inside(
+  p_route_id text,
+  p_lat double precision,
+  p_lng double precision
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r jsonb;
+  pts jsonb;
+  n integer;
+  i integer;
+  j integer;
+  xi double precision;
+  yi double precision;
+  xj double precision;
+  yj double precision;
+  inside boolean := false;
+begin
+  if p_lat is null or p_lng is null then return false; end if;
+
+  select rr into r
+  from public.app_state s,
+       lateral jsonb_array_elements(coalesce(s.state->'journeys','[]'::jsonb)) jj,
+       lateral jsonb_array_elements(coalesce(jj->'exercises','[]'::jsonb)) ee,
+       lateral jsonb_array_elements(coalesce(ee->'routes','[]'::jsonb)) rr
+  where s.id='main' and rr->>'id'=p_route_id
+  limit 1;
+
+  if r is null then return false; end if;
+  if coalesce(r->>'coverageMode','line') <> 'zone' then return true; end if;
+
+  pts := coalesce(r->'pts','[]'::jsonb);
+  n := jsonb_array_length(pts);
+  if n < 3 then return false; end if;
+
+  for i in 0..n-1 loop
+    j := case when i=0 then n-1 else i-1 end;
+    -- Los puntos de la app se almacenan [latitud, longitud].
+    yi := nullif(pts->i->>0,'')::double precision;
+    xi := nullif(pts->i->>1,'')::double precision;
+    yj := nullif(pts->j->>0,'')::double precision;
+    xj := nullif(pts->j->>1,'')::double precision;
+    if yi is null or xi is null or yj is null or xj is null then continue; end if;
+
+    if ((yi > p_lat) <> (yj > p_lat))
+       and (p_lng < (xj-xi) * (p_lat-yi) / nullif(yj-yi,0) + xi) then
+      inside := not inside;
+    end if;
+  end loop;
+  return inside;
+end;
+$$;
+
+-- 4) Reporte de cuadra con evaluación de evidencia GPS.
+-- Regla deliberadamente administrativa, no punitiva:
+-- - la cuadra SIEMPRE puede reportarse;
+-- - se valida en verde solo si existe evidencia GPS suficiente;
+-- - si falta evidencia, queda amarilla como "requiere revisión".
+create or replace function public.field_report_block(
+  p_brigadista_id text, p_pin text, p_route_id text,
+  p_lat double precision default null, p_lng double precision default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_goal integer;
+  v_done integer;
+  v_progress integer;
+  v_name text;
+  v_started_at timestamptz;
+  v_prev_report_at timestamptz;
+  v_window_start timestamptz;
+  v_latest_at timestamptz;
+  v_latest_lat double precision;
+  v_latest_lng double precision;
+  v_accuracy double precision;
+  v_points integer := 0;
+  v_movement double precision := 0;
+  v_elapsed integer := 0;
+  v_recent boolean := false;
+  v_accurate boolean := false;
+  v_in_zone boolean := false;
+  v_status text := 'review';
+  v_reason text := '';
+begin
+  if not public._field_pin_ok(p_brigadista_id,p_pin) then raise exception 'PIN incorrecto'; end if;
+  if not public._route_assigned_to(p_route_id,p_brigadista_id) then raise exception 'Ruta no asignada'; end if;
+
+  select nombre into v_name from public.brigadista_credentials where brigadista_id=p_brigadista_id;
+  v_goal := public._route_goal(p_route_id);
+
+  insert into public.route_runtime(route_id,status,started_at,updated_at)
+  values(p_route_id,'live',now(),now())
+  on conflict(route_id) do nothing;
+
+  select completed_blocks,started_at into v_done,v_started_at
+  from public.route_runtime where route_id=p_route_id for update;
+  if (select status from public.route_runtime where route_id=p_route_id)='done' then raise exception 'Ruta finalizada'; end if;
+
+  select max(reported_at) into v_prev_report_at
+  from public.route_reports where route_id=p_route_id and brigadista_id=p_brigadista_id;
+  v_window_start := coalesce(v_prev_report_at,v_started_at,now()-interval '10 minutes');
+  v_elapsed := greatest(0,extract(epoch from (now()-v_window_start))::integer);
+
+  select lat,lng,accuracy_m,recorded_at
+    into v_latest_lat,v_latest_lng,v_accuracy,v_latest_at
+  from public.route_locations
+  where route_id=p_route_id and brigadista_id=p_brigadista_id
+  order by recorded_at desc
+  limit 1;
+
+  select count(*)::integer,
+         coalesce(sum(case when step_m between 3 and 500 then step_m else 0 end),0)
+    into v_points,v_movement
+  from (
+    select public._gps_distance_m(
+             lag(lat) over(order by recorded_at),
+             lag(lng) over(order by recorded_at),
+             lat,lng
+           ) as step_m
+    from public.route_locations
+    where route_id=p_route_id
+      and brigadista_id=p_brigadista_id
+      and recorded_at >= v_window_start
+      and recorded_at <= now()
+  ) q;
+
+  v_recent := v_latest_at is not null and v_latest_at >= now()-interval '45 seconds';
+  v_accurate := v_accuracy is not null and v_accuracy <= 100;
+  v_in_zone := public._route_point_inside(
+    p_route_id,
+    coalesce(p_lat,v_latest_lat),
+    coalesce(p_lng,v_latest_lng)
+  );
+
+  if not v_recent then v_reason := concat_ws('; ',nullif(v_reason,''),'Sin ubicación GPS reciente'); end if;
+  if not v_accurate then v_reason := concat_ws('; ',nullif(v_reason,''),'Precisión GPS insuficiente'); end if;
+  if v_points < 3 then v_reason := concat_ws('; ',nullif(v_reason,''),'Pocos puntos GPS desde el último reporte'); end if;
+  if v_movement < 30 then v_reason := concat_ws('; ',nullif(v_reason,''),'Desplazamiento observado menor a 30 m'); end if;
+  if v_elapsed < 30 then v_reason := concat_ws('; ',nullif(v_reason,''),'Reporte realizado demasiado rápido'); end if;
+  if not v_in_zone then v_reason := concat_ws('; ',nullif(v_reason,''),'Ubicación fuera de la zona asignada'); end if;
+
+  if v_recent and v_accurate and v_points >= 3 and v_movement >= 30 and v_elapsed >= 30 and v_in_zone then
+    v_status := 'validated';
+    v_reason := 'Evidencia GPS suficiente';
+  end if;
+
+  v_done := least(v_goal,coalesce(v_done,0)+1);
+  v_progress := least(100,round((v_done::numeric/greatest(v_goal,1)::numeric)*100)::integer);
+
+  insert into public.route_reports(
+    route_id,brigadista_id,reported_by,block_number,lat,lng,
+    validation_status,validation_reason,gps_points_since_last,movement_m,
+    accuracy_m,in_zone,elapsed_seconds
+  ) values(
+    p_route_id,p_brigadista_id,v_name,v_done,
+    coalesce(p_lat,v_latest_lat),coalesce(p_lng,v_latest_lng),
+    v_status,v_reason,v_points,v_movement,v_accuracy,v_in_zone,v_elapsed
+  )
+  on conflict(route_id,block_number) do nothing;
+
+  update public.route_runtime
+     set completed_blocks=v_done,
+         completed_units=v_done,
+         progress=v_progress,
+         last_progress_at=now(),
+         updated_at=now()
+   where route_id=p_route_id;
+
+  return jsonb_build_object(
+    'completedBlocks',v_done,
+    'progress',v_progress,
+    'validationStatus',v_status,
+    'validationReason',v_reason,
+    'gpsPoints',v_points,
+    'movementM',round(v_movement::numeric,1),
+    'accuracyM',v_accuracy,
+    'inZone',v_in_zone,
+    'elapsedSeconds',v_elapsed
+  );
+end;
+$$;
+
+-- 5) Las asignaciones del brigadista ahora incluyen el resultado de validación de cada cuadra.
+create or replace function public.field_get_assignments(p_brigadista_id text, p_pin text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s jsonb;
+  items jsonb;
+begin
+  if not public._field_pin_ok(p_brigadista_id,p_pin) then
+    raise exception 'PIN incorrecto o brigadista inactivo';
+  end if;
+
+  select state into s from public.app_state where id='main';
+  if s is null then return jsonb_build_object('assignments','[]'::jsonb); end if;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'journey', jj - 'exercises',
+        'exercise', ee - 'routes',
+        'route', rr || jsonb_build_object(
+          'status', coalesce(rx.status, rr->>'status', 'pending'),
+          'progress', coalesce(rx.progress, nullif(rr->>'progress','')::integer, 0),
+          'completedBlocks', coalesce(rx.completed_blocks, 0),
+          'completedUnits', coalesce(rx.completed_units, rx.completed_blocks, 0),
+          'startedAt', rx.started_at,
+          'finishedAt', rx.finished_at,
+          'lastPosition', rx.last_position,
+          'lastPositionAt', rx.last_position_at,
+          'lastProgressAt', rx.last_progress_at,
+          'blockReports', coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'id', rep.id,
+                'number', rep.block_number,
+                'reportedAt', rep.reported_at,
+                'reportedBy', rep.reported_by,
+                'brigadistaId', rep.brigadista_id,
+                'lat', rep.lat,
+                'lng', rep.lng,
+                'validationStatus', rep.validation_status,
+                'validationReason', rep.validation_reason,
+                'gpsPoints', rep.gps_points_since_last,
+                'movementM', rep.movement_m,
+                'accuracyM', rep.accuracy_m,
+                'inZone', rep.in_zone,
+                'elapsedSeconds', rep.elapsed_seconds
+              ) order by rep.reported_at
+            )
+            from public.route_reports rep
+            where rep.route_id = rr->>'id'
+          ), '[]'::jsonb)
+        )
+      )
+      order by
+        case coalesce(rx.status, rr->>'status', 'pending') when 'live' then 0 else 1 end,
+        case when (ee->>'date')::date=current_date then 0 when (ee->>'date')::date>current_date then 1 else 2 end,
+        case coalesce(rx.status, rr->>'status', 'pending') when 'live' then 0 when 'pending' then 1 else 2 end,
+        abs((ee->>'date')::date-current_date),
+        ee->>'time',rr->>'name'
+    ),'[]'::jsonb
+  ) into items
+  from jsonb_array_elements(coalesce(s->'journeys','[]'::jsonb)) jj
+  cross join lateral jsonb_array_elements(coalesce(jj->'exercises','[]'::jsonb)) ee
+  cross join lateral jsonb_array_elements(coalesce(ee->'routes','[]'::jsonb)) rr
+  left join public.route_runtime rx on rx.route_id=rr->>'id'
+  where coalesce((jj->>'archived')::boolean,false)=false
+    and coalesce(rr->'memberIds','[]'::jsonb) ? p_brigadista_id;
+
+  return jsonb_build_object('assignments',items);
+end;
+$$;
+
+-- Compatibilidad con el RPC anterior de una sola asignación.
+create or replace function public.field_get_assignment(p_brigadista_id text, p_pin text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  multi jsonb;
+begin
+  multi := public.field_get_assignments(p_brigadista_id,p_pin);
+  if jsonb_array_length(coalesce(multi->'assignments','[]'::jsonb))=0 then return null; end if;
+  return (multi->'assignments')->0;
+end;
+$$;
+
+-- 6) Permisos. Los helpers no se exponen directamente; los RPC de campo siguen validados por PIN.
+revoke all on function public._gps_distance_m(double precision,double precision,double precision,double precision) from public;
+revoke all on function public._route_point_inside(text,double precision,double precision) from public;
+revoke all on function public.field_report_block(text,text,text,double precision,double precision) from public;
+revoke all on function public.field_get_assignments(text,text) from public;
+revoke all on function public.field_get_assignment(text,text) from public;
+
+grant execute on function public.field_report_block(text,text,text,double precision,double precision) to anon, authenticated;
+grant execute on function public.field_get_assignments(text,text) to anon, authenticated;
+grant execute on function public.field_get_assignment(text,text) to anon, authenticated;
+
+-- Fin de migración.
+
