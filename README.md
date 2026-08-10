@@ -25,3 +25,9 @@ Esta actualización de gestión de difusiones no requiere ejecutar SQL adicional
 
 ## Ajuste del buscador del mapa
 El buscador administrativo funciona únicamente como referencia temporal: seleccionar un resultado centra el mapa una sola vez, no guarda la sede ni bloquea el paneo/zoom. Al limpiar la búsqueda se elimina el marcador temporal.
+
+
+## Ajuste de trazado lineal/perifoneo
+- Durante el dibujo, el botón principal cambia a **Finalizar trazado** al existir al menos un tramo.
+- Finalizar bloquea la captura accidental de nuevos puntos y conserva la distancia/meta calculada.
+- El trazado puede reabrirse con **Continuar editando trazado** antes de guardar.
